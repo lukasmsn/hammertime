@@ -43,7 +43,7 @@ Error handling:
 
 - Validate inputs and fail early; log in Debug
 
-### 5) CSV import (Strong export)
+### 5) CSV import (Strong export) — deferred, decisions preserved
 
 - Expected columns (from sample): `Date, Workout Name, Duration, Exercise Name, Set Order, Weight, Reps, Distance, Seconds, Notes, Workout Notes, RPE`
 - Mapping:
@@ -64,6 +64,7 @@ Error handling:
   - Exercises: `(workout.id, name, position)`
   - Sets: `(exercise.id, setNumber)`
 - Import behavior:
+  - Defer implementation until after MVP
   - In-app importer preferred; optional Python helper to pre-normalize CSV
   - Idempotent re-runs
 
@@ -77,6 +78,17 @@ Error handling:
   - User message appended at the end
 - Persist: save user and assistant messages in local `Message`
 - Future: move to Supabase + Edge Function when backend added
+
+### 6.1) Supabase (deferred reference)
+
+- When adding a backend, target schema:
+  - `workouts(id uuid pk, user_id uuid, started_at timestamptz, name text, duration_seconds int, notes text)`
+  - `exercises(id uuid pk, user_id uuid, workout_id uuid fk, name text, position int, notes text)`
+  - `sets(id uuid pk, user_id uuid, exercise_id uuid fk, set_number int, weight_kg numeric, reps int, distance_m numeric, seconds int, rpe numeric, notes text)`
+  - `messages(id uuid pk, user_id uuid, role text, content text, created_at timestamptz, thread_id uuid)`
+- Cascades: delete workout → exercises → sets
+- Unique constraints for dedupe: `(user_id, started_at, name)`, `(workout_id, name, position)`, `(exercise_id, set_number)`
+- RLS/auth added later; Edge Function can proxy OpenAI if desired
 
 ### 7) Environment and secrets (Xcode)
 

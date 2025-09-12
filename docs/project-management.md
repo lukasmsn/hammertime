@@ -21,8 +21,7 @@
 
    - Create Xcode project `WorkoutChat` (SwiftUI, iPhone only).
    - Add SwiftData; define model container.
-   - Add `Configurations/Secrets.xcconfig` with `OPENAI_API_KEY`; bind in `Info.plist`.
-   - Acceptance: app builds; SwiftData container initializes; key is readable.
+   - Acceptance: app builds; SwiftData container initializes.
 
 2. Local data model ready (independent)
 
@@ -34,11 +33,11 @@
    - Implement `fetchWorkouts(limit: Int)`, `addWorkout`, `addExercise`, `addSet` using SwiftData context.
    - Acceptance: callable from preview to verify roundtrip.
 
-4. CSV import pipeline (independent)
+4. Mock data generation (independent)
 
-   - Simple in-app importer: pick `strong.csv` via Files and import to SwiftData.
-   - Converts units to SI, parses dates to UTC; dedupe by (date+name/exercise+position/setNumber).
-   - Acceptance: seeded workouts appear locally; re-import is idempotent.
+   - Implement deterministic mock data factory using the SwiftData models.
+   - Generate recent workouts with exercises/sets for development and previews.
+   - Acceptance: app shows non-empty lists and details without manual input.
 
 5. Workout UI (depends on 3 or 4 for meaningful data)
 
@@ -46,11 +45,16 @@
    - `WorkoutDetail` with exercises and sets; add exercise/set actions.
    - Acceptance: can create a workout and see seeded ones; add set updates local store.
 
-6. Chat MVP (with OpenAI)
+6. Chat MVP (introduce OpenAI here)
 
    - Chat view with Markdown rendering; persist messages locally.
    - On send: save user message, fetch last 5 workouts locally, build prompt, call OpenAI, save assistant.
    - Acceptance: receive assistant reply and see both messages persisted.
+
+   - OpenAI setup steps (do here, not earlier):
+     - Create `Configurations/Secrets.xcconfig` (git-ignored) with `OPENAI_API_KEY=...`.
+     - Add `OPENAI_API_KEY` to `Info.plist` as `$(OPENAI_API_KEY)`.
+     - Read via `Bundle.main.infoDictionary?["OPENAI_API_KEY"] as? String`.
 
 7. Navigation and chrome (independent of chat; light dependency on Workout UI)
 
@@ -76,7 +80,7 @@
 - OpenAI key in app (acceptable for personal prototype). Keep `Secrets.xcconfig` git-ignored.
 - Streaming deferred.
 
-### Xcode env handling (OpenAI key)
+### Xcode env handling (OpenAI key) — performed in Chat phase
 
 1. Create `Configurations/Secrets.xcconfig` (git-ignored):
    - `OPENAI_API_KEY=...`
@@ -87,4 +91,12 @@
 ### Out-of-scope setup (for later phase)
 
 - Supabase schema, auth/RLS, env secrets, and Edge Functions.
-- OpenAI integration and streaming.
+- OpenAI streaming.
+
+#### CSV import (deferred)
+
+- Preserve decisions for future import:
+  - Columns: `Date, Workout Name, Duration, Exercise Name, Set Order, Weight, Reps, Distance, Seconds, Notes, Workout Notes, RPE`.
+  - Mapping: Date→`startedAt` (UTC), Workout Name→`name`, Duration→`durationSeconds`, Exercise Name→`name`, Set Order→`setNumber`, Weight→`weightKg` (lb→kg if needed), Reps→`reps`, Distance→`distanceM`, Seconds→`seconds`, Notes→per-set notes, Workout Notes→workout notes, RPE→`rpe`.
+  - Dedupe keys (local): Workouts `(startedAt, name)`, Exercises `(workout.id, name, position)`, Sets `(exercise.id, setNumber)`.
+  - Behavior: idempotent re-runs; SI units; parse device-local time → UTC.
