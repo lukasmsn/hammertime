@@ -74,7 +74,7 @@ struct WorkoutDetailView: View {
                                     Spacer()
 
                                     Button {
-                                        s.isLogged = true
+                                        s.isLogged.toggle()
                                         try? context.save()
                                     } label: {
                                         Image(systemName: s.isLogged ? "checkmark.seal.fill" : "checkmark.circle.fill")
