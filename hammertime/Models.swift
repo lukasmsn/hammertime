@@ -57,8 +57,9 @@ final class SetEntry {
     var rpe: Double?
     var notes: String?
     var exercise: Exercise?
+    var isLogged: Bool
 
-    init(id: UUID = UUID(), setNumber: Int, weightKg: Double? = nil, reps: Int? = nil, distanceM: Double? = nil, seconds: Int? = nil, rpe: Double? = nil, notes: String? = nil, exercise: Exercise? = nil) {
+    init(id: UUID = UUID(), setNumber: Int, weightKg: Double? = nil, reps: Int? = nil, distanceM: Double? = nil, seconds: Int? = nil, rpe: Double? = nil, notes: String? = nil, exercise: Exercise? = nil, isLogged: Bool = false) {
         self.id = id
         self.setNumber = setNumber
         self.weightKg = weightKg
@@ -68,6 +69,7 @@ final class SetEntry {
         self.rpe = rpe
         self.notes = notes
         self.exercise = exercise
+        self.isLogged = isLogged
     }
 }
 
