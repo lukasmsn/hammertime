@@ -198,8 +198,8 @@ enum SeedData {
         }
 
         try context.save()
-        // Build seed templates from seeded workouts
-        try? TemplatesService.buildTemplatesFromHistory(context: context)
+        // Hard-code six core templates
+        try? TemplatesService.upsertHardcodedPPLTemplates(context: context, includeCardio: true)
     }
 }
 
