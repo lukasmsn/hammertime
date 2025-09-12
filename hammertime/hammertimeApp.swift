@@ -12,7 +12,7 @@ import SwiftData
 struct hammertimeApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
         }
         .modelContainer(sharedModelContainer)
     }
@@ -33,3 +33,21 @@ var sharedModelContainer: ModelContainer = {
         fatalError("Failed to initialize ModelContainer: \(error)")
     }
 }()
+
+// Root with tabs (Workouts, Chat)
+struct RootView: View {
+    var body: some View {
+        TabView {
+            NavigationStack { ContentView() }
+                .tabItem { Label("Workouts", systemImage: "list.bullet") }
+            NavigationStack { ChatView() }
+                .tabItem { Label("Chat", systemImage: "message.fill") }
+        }
+    }
+}
+
+#Preview {
+    let config = ModelConfiguration(isStoredInMemoryOnly: true)
+    let container = try! ModelContainer(for: Workout.self, Exercise.self, SetEntry.self, Message.self, configurations: config)
+    return RootView().modelContainer(container)
+}
