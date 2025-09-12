@@ -121,7 +121,9 @@ struct ChatView: View {
     }
 
     private func buildChatContext() throws -> [String] {
-        let all = try context.fetch(FetchDescriptor<Workout>(sortBy: [SortDescriptor(\Workout.startedAt, order: .forward)]))
+        let showSeed = UserDefaults.standard.bool(forKey: "showSeedData")
+        var fd = FetchDescriptor<Workout>(sortBy: [SortDescriptor(\Workout.startedAt, order: .forward)])
+        let all = try context.fetch(fd).filter { showSeed || !$0.isSeed }
         guard let lastDate = all.last?.startedAt else { return [] }
         let block = makeCompactMetricsJSONBlock(all: all, lastDate: lastDate, spanWeeks: 26)
         return [block]

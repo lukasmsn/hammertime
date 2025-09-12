@@ -24,13 +24,24 @@ var sharedModelContainer: ModelContainer = {
         Workout.self,
         Exercise.self,
         SetEntry.self,
-        Message.self
+        Message.self,
+        WorkoutTemplate.self,
+        TemplateExercise.self
     ])
     let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+
     do {
         return try ModelContainer(for: schema, configurations: configuration)
     } catch {
-        fatalError("Failed to initialize ModelContainer: \(error)")
+        #if DEBUG
+        print("[SwiftData] Persistent store init failed (\(error)). Falling back to in-memory store for DEBUG.")
+        #endif
+        let memConfig = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+        do {
+            return try ModelContainer(for: schema, configurations: memConfig)
+        } catch {
+            fatalError("Failed to initialize ModelContainer (in-memory fallback also failed): \(error)")
+        }
     }
 }()
 
@@ -38,6 +49,7 @@ var sharedModelContainer: ModelContainer = {
 struct RootView: View {
     @Environment(\.modelContext) private var context
     @State private var didSeed = false
+    @AppStorage("showSeedData") private var showSeedData = true
     var body: some View {
         TabView {
             NavigationStack { ContentView() }
@@ -169,7 +181,7 @@ enum SeedData {
         ]
 
         for entry in entries {
-            let w = Workout(startedAt: entry.0, name: entry.1, durationSeconds: entry.2, notes: entry.3, bodyWeightKg: entry.4, sleepHours: entry.5)
+            let w = Workout(startedAt: entry.0, name: entry.1, durationSeconds: entry.2, notes: entry.3, bodyWeightKg: entry.4, sleepHours: entry.5, isSeed: true)
             context.insert(w)
             var posAcc = 0
             for exTuple in entry.6 {
@@ -186,6 +198,8 @@ enum SeedData {
         }
 
         try context.save()
+        // Build seed templates from seeded workouts
+        try? TemplatesService.buildTemplatesFromHistory(context: context)
     }
 }
 

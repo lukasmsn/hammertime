@@ -17,9 +17,10 @@ final class Workout {
     var notes: String?
     var bodyWeightKg: Double?
     var sleepHours: Double?
+    var isSeed: Bool
     @Relationship(deleteRule: .cascade) var exercises: [Exercise]
 
-    init(id: UUID = UUID(), startedAt: Date, name: String, durationSeconds: Int? = nil, notes: String? = nil, bodyWeightKg: Double? = nil, sleepHours: Double? = nil, exercises: [Exercise] = []) {
+    init(id: UUID = UUID(), startedAt: Date, name: String, durationSeconds: Int? = nil, notes: String? = nil, bodyWeightKg: Double? = nil, sleepHours: Double? = nil, isSeed: Bool = false, exercises: [Exercise] = []) {
         self.id = id
         self.startedAt = startedAt
         self.name = name
@@ -27,6 +28,7 @@ final class Workout {
         self.notes = notes
         self.bodyWeightKg = bodyWeightKg
         self.sleepHours = sleepHours
+        self.isSeed = isSeed
         self.exercises = exercises
     }
 }
@@ -89,6 +91,39 @@ final class Message {
         self.role = role
         self.content = content
         self.createdAt = createdAt
+    }
+}
+
+
+// MARK: - Templates
+
+@Model
+final class WorkoutTemplate {
+    @Attribute(.unique) var id: UUID
+    var name: String
+    var isSeed: Bool
+    @Relationship(deleteRule: .cascade) var exercises: [TemplateExercise]
+
+    init(id: UUID = UUID(), name: String, isSeed: Bool = false, exercises: [TemplateExercise] = []) {
+        self.id = id
+        self.name = name
+        self.isSeed = isSeed
+        self.exercises = exercises
+    }
+}
+
+@Model
+final class TemplateExercise {
+    @Attribute(.unique) var id: UUID
+    var name: String
+    var position: Int
+    var template: WorkoutTemplate?
+
+    init(id: UUID = UUID(), name: String, position: Int, template: WorkoutTemplate? = nil) {
+        self.id = id
+        self.name = name
+        self.position = position
+        self.template = template
     }
 }
 

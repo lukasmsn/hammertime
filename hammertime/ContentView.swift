@@ -13,10 +13,12 @@ struct ContentView: View {
     @Query(sort: \Workout.startedAt, order: .reverse) private var workouts: [Workout]
     @State private var path = NavigationPath()
     @State private var showCreate = false
+    @State private var showTemplates = false
     @State private var nameInput: String = ""
     @State private var dateInput: Date = .now
     @State private var showingDeleteAlert = false
     @State private var workoutPendingDelete: Workout?
+    @AppStorage("showSeedData") private var showSeedData = true
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -50,7 +52,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
-                        ForEach(workouts) { w in
+                        ForEach(workouts.filter { showSeedData || !$0.isSeed }) { w in
                             NavigationLink(value: w) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(w.name).font(.headline)
@@ -73,6 +75,14 @@ struct ContentView: View {
             .navigationTitle("Workouts")
             .navigationDestination(for: Workout.self) { workout in
                 WorkoutDetailView(workout: workout)
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Templates") { showTemplates = true }
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(showSeedData ? "Hide Seed" : "Show Seed") { showSeedData.toggle() }
+                }
             }
         }
         .overlay(alignment: .bottomTrailing) {
@@ -111,6 +121,10 @@ struct ContentView: View {
                 }
             }
         }
+        .sheet(isPresented: $showTemplates) {
+            NavigationStack { TemplatesView(onStart: { template in startFromTemplate(template) }) }
+                .presentationDetents([.medium, .large])
+        }
         .alert("Delete workout?", isPresented: $showingDeleteAlert, presenting: workoutPendingDelete) { workout in
             Button("Delete", role: .destructive) { deleteWorkout(workout) }
             Button("Cancel", role: .cancel) { }
@@ -137,6 +151,14 @@ struct ContentView: View {
         nameInput = ""
         dateInput = .now
         showCreate = false
+    }
+
+    private func startFromTemplate(_ template: WorkoutTemplate) {
+        let workout = TemplatesService.instantiate(template)
+        context.insert(workout)
+        try? context.save()
+        showTemplates = false
+        DispatchQueue.main.async { path.append(workout) }
     }
 
     private func deleteWorkout(_ workout: Workout) {
