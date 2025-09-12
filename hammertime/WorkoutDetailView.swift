@@ -53,6 +53,13 @@ struct WorkoutDetailView: View {
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
 
+                                    if let prev = previousFor(exerciseName: ex.name, setNumber: s.setNumber) {
+                                        Text("Prev: \(prev)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .frame(minWidth: 64, alignment: .leading)
+                                    }
+
                                     HStack(spacing: 6) {
                                         TextField(
                                             "0",
@@ -93,20 +100,13 @@ struct WorkoutDetailView: View {
 
                                     Spacer()
 
-                                    VStack(alignment: .trailing, spacing: 4) {
-                                        if let prev = previousFor(exerciseName: ex.name, setNumber: s.setNumber) {
-                                            Text("Prev: \(prev)")
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        Button {
-                                            s.isLogged.toggle()
-                                            try? context.save()
-                                            if s.isLogged { startRestTimer(seconds: 90) }
-                                        } label: {
-                                            Image(systemName: s.isLogged ? "checkmark.seal.fill" : "checkmark.circle.fill")
-                                                .foregroundStyle(s.isLogged ? .green : .blue)
-                                        }
+                                    Button {
+                                        s.isLogged.toggle()
+                                        try? context.save()
+                                        if s.isLogged { startRestTimer(seconds: 90) }
+                                    } label: {
+                                        Image(systemName: s.isLogged ? "checkmark.seal.fill" : "circle")
+                                            .foregroundStyle(s.isLogged ? .green : .blue)
                                     }
                                     .buttonStyle(.borderless)
                                 }
@@ -130,6 +130,7 @@ struct WorkoutDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { if workoutStartAt.timeIntervalSince1970 == 0 { workoutStartAt = .now } }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now in nowTick = now }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     private var sortedExercises: [Exercise] {

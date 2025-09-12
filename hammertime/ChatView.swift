@@ -41,6 +41,7 @@ struct ChatView: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages.last?.id) { _, newValue in
                     if let id = newValue {
                         withAnimation(.easeOut(duration: 0.25)) {
