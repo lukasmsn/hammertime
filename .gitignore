@@ -1,21 +1,54 @@
-# Secrets
+# Secrets - NEVER commit these files
 Configurations/Secrets.xcconfig
 Secrets.xcconfig
-Secrets.xcconfig
+*.xcconfig
+**/*Secret*
+**/*secret*
+**/*API_KEY*
+**/*api_key*
+.env
+.env.*
+!.env.example
 
 # macOS
 .DS_Store
 
-# Xcode
+# Xcode - User-specific files (should never be committed)
 build/
 DerivedData/
 xcuserdata/
+**/xcuserdata/
 *.xcuserstate
+**/UserInterfaceState.xcuserstate
 *.xccheckout
 *.xcscmblueprint
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+.build/
 
 # SwiftPM
 .swiftpm/
 Package.resolved
+
+# CocoaPods (if used)
+Pods/
+# *.xcworkspace  # Commented out - we want to track the main project workspace
+
+# Carthage (if used)
+Carthage/Build/
+
+# Accio dependency management
+Dependencies/
+.accio/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
 
 
