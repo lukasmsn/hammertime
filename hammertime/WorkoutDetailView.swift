@@ -8,6 +8,7 @@ import SwiftData
 
 struct WorkoutDetailView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
     @State var workout: Workout
     @State private var workoutStartAt: Date = .now
     @State private var nowTick: Date = .now
@@ -131,6 +132,11 @@ struct WorkoutDetailView: View {
         .onAppear { if workoutStartAt.timeIntervalSince1970 == 0 { workoutStartAt = .now } }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now in nowTick = now }
         .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Finish") { finishWorkout() }
+            }
+        }
     }
 
     private var sortedExercises: [Exercise] {
@@ -212,6 +218,13 @@ extension WorkoutDetailView {
             }
         }
         return nil
+    }
+
+    private func finishWorkout() {
+        let elapsed = Int(max(0, Date().timeIntervalSince(workout.startedAt)))
+        workout.durationSeconds = elapsed
+        try? context.save()
+        dismiss()
     }
 }
 
