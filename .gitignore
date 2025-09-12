@@ -1,6 +1,7 @@
 # Secrets
 Configurations/Secrets.xcconfig
 Secrets.xcconfig
+Secrets.xcconfig
 
 # macOS
 .DS_Store

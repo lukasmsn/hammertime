@@ -77,7 +77,7 @@
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "OPENAI_API_KEY"
-            value = "ADD BACK IN"
+            value = "$(OPENAI_API_KEY)"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>
