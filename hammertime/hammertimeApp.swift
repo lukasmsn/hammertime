@@ -47,6 +47,7 @@ struct RootView: View {
         }
         .task {
             guard !didSeed else { return }
+            NotificationManager.requestAuthorization()
             do {
                 try SeedData.seedIfNeeded(context: context)
             } catch {

@@ -9,14 +9,34 @@ import SwiftData
 struct WorkoutDetailView: View {
     @Environment(\.modelContext) private var context
     @State var workout: Workout
+    @State private var workoutStartAt: Date = .now
+    @State private var nowTick: Date = .now
 
     var body: some View {
         List {
+            Section(header: Text("Session")) {
+                HStack {
+                    Label("Duration", systemImage: "clock")
+                    Spacer()
+                    Text(durationString)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section(header: Text("Exercises")) {
                 ForEach(sortedExercises) { ex in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            TextField("Exercise name", text: Binding(get: { ex.name }, set: { ex.name = $0 }))
+                            Menu {
+                                ForEach(ExerciseLibrary.all, id: \.self) { name in
+                                    Button(name) { ex.name = name; try? context.save() }
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(ex.name).font(.headline)
+                                    Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
+                                }
+                            }
                                 .font(.headline)
                             Spacer()
                             Button(action: { addSet(to: ex) }) {
@@ -73,12 +93,20 @@ struct WorkoutDetailView: View {
 
                                     Spacer()
 
-                                    Button {
-                                        s.isLogged.toggle()
-                                        try? context.save()
-                                    } label: {
-                                        Image(systemName: s.isLogged ? "checkmark.seal.fill" : "checkmark.circle.fill")
-                                            .foregroundStyle(s.isLogged ? .green : .blue)
+                                    VStack(alignment: .trailing, spacing: 4) {
+                                        if let prev = previousFor(exerciseName: ex.name, setNumber: s.setNumber) {
+                                            Text("Prev: \(prev)")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Button {
+                                            s.isLogged.toggle()
+                                            try? context.save()
+                                            if s.isLogged { startRestTimer(seconds: 90) }
+                                        } label: {
+                                            Image(systemName: s.isLogged ? "checkmark.seal.fill" : "checkmark.circle.fill")
+                                                .foregroundStyle(s.isLogged ? .green : .blue)
+                                        }
                                     }
                                     .buttonStyle(.borderless)
                                 }
@@ -100,6 +128,8 @@ struct WorkoutDetailView: View {
         }
         .navigationTitle(workout.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { if workoutStartAt.timeIntervalSince1970 == 0 { workoutStartAt = .now } }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now in nowTick = now }
     }
 
     private var sortedExercises: [Exercise] {
@@ -149,6 +179,38 @@ struct WorkoutDetailView: View {
     private func deleteSet(_ s: SetEntry) {
         context.delete(s)
         try? context.save()
+    }
+}
+
+// MARK: - Timers & Helpers
+extension WorkoutDetailView {
+    private var durationString: String {
+        let seconds = Int(max(0, nowTick.timeIntervalSince(workoutStartAt)))
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        let s = seconds % 60
+        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+        return String(format: "%d:%02d", m, s)
+    }
+
+    private func startRestTimer(seconds: Int) {
+        NotificationManager.scheduleRestDone(after: seconds)
+    }
+
+    private func previousFor(exerciseName: String, setNumber: Int) -> String? {
+        var descriptor = FetchDescriptor<Workout>(sortBy: [SortDescriptor(\Workout.startedAt, order: .reverse)])
+        descriptor.fetchLimit = 10
+        guard let workouts = try? context.fetch(descriptor) else { return nil }
+        for w in workouts where w.id != workout.id {
+            if let ex = w.exercises.first(where: { $0.name == exerciseName }) {
+                if let set = ex.sets.first(where: { $0.setNumber == setNumber }) {
+                    let wStr = set.weightKg.map { String(Int($0)) } ?? "-"
+                    let rStr = set.reps.map { String($0) } ?? "-"
+                    return "\(wStr)x\(rStr)"
+                }
+            }
+        }
+        return nil
     }
 }
 
