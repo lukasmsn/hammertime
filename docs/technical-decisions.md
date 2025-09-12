@@ -74,7 +74,9 @@ Error handling:
 - Model: `gpt-4o-mini` (or similar); temperature 0.4; max tokens ~600
 - Prompt assembly (client):
   - System prompt: concise personal trainer
-  - Context: last 5 workouts, one line each (date name: exercises with sets like `80x5, 80x5`)
+  - Context blocks (JSON):
+    - `METRICS_JSON`: aggregate metrics for the entire dataset
+    - `WORKOUTS_JSON`: recent N workouts (N≈15) as rich JSON objects
   - User message appended at the end
 - Persist: save user and assistant messages in local `Message`
 - Future: move to Supabase + Edge Function when backend added
@@ -125,3 +127,34 @@ Error handling:
 - Use `.gitignore` for `Configurations/Secrets.xcconfig`
 - Keep SQL schema and CSV script in repo for reproducibility
 - Keep this doc as the single source of truth for implementation decisions
+
+### Appendix A — Metrics summary format and token budget
+
+Context blocks sent to the model:
+
+- METRICS_JSON
+
+  - Fields:
+    - `prs`: { ExerciseName: { bestE1RM: number } }
+    - `totalVolumeKg`: { ExerciseName: number }
+    - `weeklyCardioMinutes`: { ISOYear-Week: minutes }
+    - `avgBodyWeightKg`: number
+    - `avgSleepHours`: number
+
+- WORKOUTS_JSON
+  - `workouts`: Array of recent N workouts:
+    - `startedAt` (ISO8601), `name`, optional `durationSeconds`, `notes`, `bodyWeightKg`, `sleepHours`
+    - `exercises[]`: name, position, optional notes, `sets[]` with setNumber, weightKg, reps, distanceM, seconds, rpe, notes, isLogged
+
+Token budget (approx):
+
+- METRICS_JSON: ~100–250 tokens depending on exercise count and weeks
+- WORKOUTS_JSON (N=15): ~700–1100 tokens (compact JSON, no whitespace)
+- System + user + overhead: ~150–250 tokens
+- Total target: ~1.0–1.6k tokens per request (within 4k context comfortably)
+
+Guidelines:
+
+- Prefer concise keys and omit nulls to reduce tokens
+- Keep N≈15 for MVP; adjust dynamically if user messages are long
+- Include cardio entries and notes; model can ignore if not needed

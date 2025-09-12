@@ -15,14 +15,18 @@ final class Workout {
     var name: String
     var durationSeconds: Int?
     var notes: String?
+    var bodyWeightKg: Double?
+    var sleepHours: Double?
     @Relationship(deleteRule: .cascade) var exercises: [Exercise]
 
-    init(id: UUID = UUID(), startedAt: Date, name: String, durationSeconds: Int? = nil, notes: String? = nil, exercises: [Exercise] = []) {
+    init(id: UUID = UUID(), startedAt: Date, name: String, durationSeconds: Int? = nil, notes: String? = nil, bodyWeightKg: Double? = nil, sleepHours: Double? = nil, exercises: [Exercise] = []) {
         self.id = id
         self.startedAt = startedAt
         self.name = name
         self.durationSeconds = durationSeconds
         self.notes = notes
+        self.bodyWeightKg = bodyWeightKg
+        self.sleepHours = sleepHours
         self.exercises = exercises
     }
 }

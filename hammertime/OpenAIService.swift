@@ -42,10 +42,10 @@ final class OpenAIService {
         if let envKey, !envKey.isEmpty { print("[OpenAI] Found key in ENV (len=\(envKey.count))") }
         #endif
         let system = "You are a concise, encouraging personal trainer. Be specific and actionable."
-        let contextJoined = contextLines.joined(separator: "\n")
+        let contextJoined = contextLines.joined(separator: "\n\n")
         let messages = [
             ChatRequest.Message(role: "system", content: system),
-            ChatRequest.Message(role: "system", content: "Recent workouts (most recent first):\n\(contextJoined)"),
+            ChatRequest.Message(role: "system", content: "Context block (METRICS_JSON) follows. Use it for analysis and coaching.\n\n\(contextJoined)"),
             ChatRequest.Message(role: "user", content: userMessage)
         ]
 
@@ -122,13 +122,13 @@ final class OpenAIService {
         }
 
         let system = "You are a concise, encouraging personal trainer. Be specific and actionable."
-        let contextJoined = contextLines.joined(separator: "\n")
+        let contextJoined = contextLines.joined(separator: "\n\n")
 
         var messages: [ChatRequest.Message] = [
             ChatRequest.Message(role: "system", content: system)
         ]
         if !contextJoined.isEmpty {
-            messages.append(ChatRequest.Message(role: "system", content: "Recent workouts (most recent first):\n\(contextJoined)"))
+            messages.append(ChatRequest.Message(role: "system", content: "Context block (METRICS_JSON) follows. Use it for analysis and coaching.\n\n\(contextJoined)"))
         }
         for m in history {
             let role = (m.role == "assistant" ? "assistant" : "user")
