@@ -96,13 +96,26 @@ struct ChatView: View {
                 context.insert(assistant)
                 try? context.save()
             } catch {
-                errorText = error.localizedDescription
-                let assistant = Message(role: "assistant", content: "I couldn't process that just now. Try again in a moment.")
-                context.insert(assistant)
-                try? context.save()
+                errorText = userFriendly(error)
             }
             isSending = false
         }
+    }
+
+    private func userFriendly(_ error: Error) -> String {
+        if let err = error as? OpenAIError {
+            switch err {
+            case .missingApiKey:
+                return "Missing OpenAI API key. Set OPENAI_API_KEY in Secrets.xcconfig and ensure the target's Base Configuration points to it."
+            case .http(let status, let body):
+                return "OpenAI HTTP error \(status). \(body ?? "")"
+            case .decoding:
+                return "OpenAI response could not be parsed. Try again."
+            case .network(let underlying):
+                return "Network error: \(underlying.localizedDescription)"
+            }
+        }
+        return error.localizedDescription
     }
 
     private func fetchWorkoutContextLines(limit: Int) throws -> [String] {

@@ -24,6 +24,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		8AB2B9AF2E73D82F00ACA682 /* Configurations/Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configurations/Secrets.xcconfig; sourceTree = "<group>"; };
 		8ADF88572E73CADF00EF3638 /* hammertime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = hammertime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8ADF88642E73CAE000EF3638 /* hammertimeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = hammertimeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8ADF886E2E73CAE000EF3638 /* hammertimeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = hammertimeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -79,6 +80,7 @@
 				8ADF88672E73CAE000EF3638 /* hammertimeTests */,
 				8ADF88712E73CAE000EF3638 /* hammertimeUITests */,
 				8ADF88582E73CADF00EF3638 /* Products */,
+				8AB2B9AF2E73D82F00ACA682 /* Configurations/Secrets.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -392,6 +394,7 @@
 		};
 		8ADF88792E73CAE000EF3638 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 8AB2B9AF2E73D82F00ACA682 /* Configurations/Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -400,6 +403,7 @@
 				DEVELOPMENT_TEAM = GGPYSL9J3B;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_OPENAI_API_KEY = "$(OPENAI_API_KEY)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -420,6 +424,7 @@
 		};
 		8ADF887A2E73CAE000EF3638 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 8AB2B9AF2E73D82F00ACA682 /* Configurations/Secrets.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -428,6 +433,7 @@
 				DEVELOPMENT_TEAM = GGPYSL9J3B;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_OPENAI_API_KEY = "$(OPENAI_API_KEY)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
