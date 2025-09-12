@@ -88,6 +88,17 @@
 3. Add `OPENAI_API_KEY` as a user-defined entry in `Info.plist` with value `$(OPENAI_API_KEY)`.
 4. Read in code: `Bundle.main.infoDictionary?["OPENAI_API_KEY"] as? String`.
 
+### TODO — OpenAI key handling (Release readiness)
+
+- Ensure Debug and Release both resolve `OPENAI_API_KEY` at runtime:
+  - Base Configuration for target set to `Configurations/Secrets.xcconfig`.
+  - Build Settings → add `INFOPLIST_KEY_OPENAI_API_KEY = $(OPENAI_API_KEY)`.
+  - Or create a real `Info.plist` and add key `OPENAI_API_KEY` with value `$(OPENAI_API_KEY)`.
+- For local dev, Scheme → Run → Environment Variables can set `OPENAI_API_KEY`.
+- Verify by checking console in Debug:
+  - Expect `[OpenAI] Found key in Info.plist (len=...)` or `... ENV ...`.
+- Security note: shipping the key in-app is acceptable for this MVP only. Plan to proxy via backend in a later phase.
+
 ### Out-of-scope setup (for later phase)
 
 - Supabase schema, auth/RLS, env secrets, and Edge Functions.

@@ -91,7 +91,8 @@ struct ChatView: View {
         Task {
             do {
                 let contextLines = try fetchWorkoutContextLines(limit: 5)
-                let reply = try await OpenAIService.shared.singleShotReply(contextLines: contextLines, userMessage: trimmed)
+                let historyPairs: [(role: String, content: String)] = Array(messages.suffix(19)).map { ($0.role, $0.content) } + [("user", trimmed)]
+                let reply = try await OpenAIService.shared.replyWithHistory(contextLines: contextLines, history: historyPairs)
                 let assistant = Message(role: "assistant", content: reply)
                 context.insert(assistant)
                 try? context.save()
