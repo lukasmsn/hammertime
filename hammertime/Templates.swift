@@ -125,11 +125,11 @@ enum TemplatesService {
             ],
             "Legs A": [
                 "Cycling (Indoor)",
-                "Seated Leg Curl (Machine)",
                 "Squat (Barbell)",
                 "Good Morning (Barbell)",
                 "Leg Press",
                 "Back Extension",
+                "Seated Leg Curl (Machine)",
                 "Standing Calf Raise (Machine)"
             ],
             "Legs B": [
@@ -137,6 +137,7 @@ enum TemplatesService {
                 "Front Squat (Barbell)",
                 "Romanian Deadlift (Barbell)",
                 "Back Extension",
+                "Lunge (Dumbbell)",
                 "Leg Extension (Machine)",
                 "Hanging Leg Raise"
             ]

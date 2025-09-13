@@ -29,7 +29,7 @@ struct WorkoutDetailView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Menu {
-                                ForEach(ExerciseLibrary.all, id: \.self) { name in
+                                ForEach(exerciseOptions, id: \.self) { name in
                                     Button(name) { ex.name = name; try? context.save() }
                                 }
                             } label: {
@@ -142,6 +142,8 @@ struct WorkoutDetailView: View {
     private var sortedExercises: [Exercise] {
         workout.exercises.sorted { $0.position < $1.position }
     }
+
+    private var exerciseOptions: [String] { ExerciseLibrary.all }
 
     private func setsLine(for ex: Exercise) -> String {
         let sorted = ex.sets.sorted { $0.setNumber < $1.setNumber }
