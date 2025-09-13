@@ -5,13 +5,18 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
+import AudioToolbox
 
 struct WorkoutDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @State var workout: Workout
-    @State private var workoutStartAt: Date = .now
-    @State private var nowTick: Date = .now
+    @State private var exercisePicking: Exercise?
+    @State private var showingNotes = false
+    @State private var restEndAt: Date?
+    @State private var restStartAt: Date?
+    @State private var saveWorkItem: DispatchWorkItem?
 
     var body: some View {
         List {
@@ -19,26 +24,34 @@ struct WorkoutDetailView: View {
                 HStack {
                     Label("Duration", systemImage: "clock")
                     Spacer()
-                    Text(durationString)
-                        .monospacedDigit()
+                    DurationLabel(startedAt: workout.startedAt)
                         .foregroundStyle(.secondary)
                 }
+                Button {
+                    showingNotes = true
+                } label: {
+                    HStack {
+                        Label("Notes", systemImage: "note.text")
+                        Spacer()
+                        Text(workout.notes?.isEmpty == false ? "Edit" : "Add")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
             }
             Section(header: Text("Exercises")) {
                 ForEach(sortedExercises) { ex in
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Menu {
-                                ForEach(exerciseOptions, id: \.self) { name in
-                                    Button(name) { ex.name = name; try? context.save() }
-                                }
+                            Button {
+                                exercisePicking = ex
                             } label: {
                                 HStack(spacing: 6) {
                                     Text(ex.name).font(.headline)
                                     Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
                                 }
                             }
-                                .font(.headline)
+                            .font(.headline)
                             Spacer()
                             Button(action: { addSet(to: ex) }) {
                                 Label("Add Set", systemImage: "plus")
@@ -65,8 +78,8 @@ struct WorkoutDetailView: View {
                                         TextField(
                                             "0",
                                             value: Binding<Double>(
-                                                get: { s.weightKg ?? 0 },
-                                                set: { s.weightKg = $0 }
+                                                get: { kgToLb(s.weightKg) },
+                                                set: { newLb in s.weightKg = lbToKg(newLb); scheduleAutosave() }
                                             ),
                                             format: .number
                                         )
@@ -75,9 +88,9 @@ struct WorkoutDetailView: View {
                                         .padding(.horizontal, 10)
                                         .background(Color.gray.opacity(0.12))
                                         .clipShape(RoundedRectangle(cornerRadius: 8))
-                                        .frame(width: 80)
+                                        .frame(width: 90)
 
-                                        Text("kg")
+                                        Text("lb")
                                             .foregroundStyle(.secondary)
                                     }
 
@@ -88,7 +101,7 @@ struct WorkoutDetailView: View {
                                         "0",
                                         value: Binding<Int>(
                                             get: { s.reps ?? 0 },
-                                            set: { s.reps = $0 }
+                                            set: { s.reps = $0; scheduleAutosave() }
                                         ),
                                         format: .number
                                     )
@@ -126,15 +139,34 @@ struct WorkoutDetailView: View {
                     Label("Add Exercise", systemImage: "plus")
                 }
             }
+
+            if let start = restStartAt, let end = restEndAt, end > Date() {
+                Section(footer: RestCountdownBar(startAt: start, endAt: end) { triggerRestEndFeedback(); restStartAt = nil; restEndAt = nil }) { EmptyView() }
+            }
         }
         .navigationTitle(workout.name)
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { if workoutStartAt.timeIntervalSince1970 == 0 { workoutStartAt = .now } }
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now in nowTick = now }
+        .sheet(isPresented: Binding(get: { exercisePicking != nil }, set: { if $0 == false { exercisePicking = nil } })) {
+            if let ex = exercisePicking {
+                ExercisePickerSheet(currentName: ex.name, onSelect: { name in
+                    ex.name = name
+                    try? context.save()
+                })
+            }
+        }
+        .sheet(isPresented: $showingNotes) {
+            NotesEditorSheet(text: workout.notes ?? "") { newText in
+                workout.notes = newText
+                try? context.save()
+            }
+            .presentationDetents([.medium])
+        }
         .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Finish") { finishWorkout() }
+                if workout.finishedAt == nil {
+                    Button("Finish") { finishWorkout() }
+                }
             }
         }
     }
@@ -148,7 +180,7 @@ struct WorkoutDetailView: View {
     private func setsLine(for ex: Exercise) -> String {
         let sorted = ex.sets.sorted { $0.setNumber < $1.setNumber }
         return sorted.map { s in
-            let w = s.weightKg.map { String(format: "%.0f", $0) } ?? "-"
+            let w = s.weightKg.map { String(format: "%.0f", kgToLb($0)) } ?? "-"
             let r = s.reps.map { String($0) } ?? "-"
             return "\(w)x\(r)"
         }.joined(separator: ", ")
@@ -156,7 +188,7 @@ struct WorkoutDetailView: View {
 
     private func setLine(_ s: SetEntry) -> String {
         var parts: [String] = []
-        if let w = s.weightKg { parts.append("\(Int(w)) kg") }
+        if let w = s.weightKg { parts.append("\(Int(round(kgToLb(w)))) lb") }
         if let r = s.reps { parts.append("x\(r)") }
         if let sec = s.seconds, sec > 0 { parts.append("\(sec)s") }
         if let d = s.distanceM, d > 0 { parts.append("\(Int(d)) m") }
@@ -191,19 +223,142 @@ struct WorkoutDetailView: View {
     }
 }
 
-// MARK: - Timers & Helpers
-extension WorkoutDetailView {
+// Duration label isolated from the list tick updates
+private struct DurationLabel: View {
+    let startedAt: Date
+    @State private var nowTick: Date = .now
+    var body: some View {
+        Text(durationString)
+            .monospacedDigit()
+            .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now in nowTick = now }
+    }
     private var durationString: String {
-        let seconds = Int(max(0, nowTick.timeIntervalSince(workoutStartAt)))
+        let seconds = Int(max(0, nowTick.timeIntervalSince(startedAt)))
         let h = seconds / 3600
         let m = (seconds % 3600) / 60
         let s = seconds % 60
         if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
         return String(format: "%d:%02d", m, s)
     }
+}
 
+// Rest countdown bar with no controls; fires completion when reaches 0
+private struct RestCountdownBar: View {
+    let startAt: Date
+    let endAt: Date
+    var onFinish: () -> Void
+    @State private var now: Date = .now
+    @State private var didFire = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label("Rest", systemImage: "hourglass")
+                Spacer()
+                Text(remainingString).monospacedDigit()
+            }
+            GeometryReader { geo in
+                let total = max(0, endAt.timeIntervalSince(startAt))
+                let remain = max(0, endAt.timeIntervalSince(now))
+                let pct = total > 0 ? remain / total : 0
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 6).fill(Color.gray.opacity(0.2))
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(LinearGradient(colors: [.orange, .red], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: geo.size.width * pct)
+                }
+                .frame(height: 8)
+            }
+            .frame(height: 8)
+        }
+        .padding(.vertical, 8)
+        .onReceive(Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()) { t in
+            now = t
+            if !didFire && now >= endAt {
+                didFire = true
+                onFinish()
+            }
+        }
+    }
+    private var remainingString: String {
+        let remain = max(0, Int(endAt.timeIntervalSince(now)))
+        let m = remain / 60
+        let s = remain % 60
+        return String(format: "%d:%02d", m, s)
+    }
+}
+
+// Minimal notes editor sheet
+private struct NotesEditorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State var text: String
+    var onSave: (String) -> Void
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $text)
+                .padding()
+                .navigationTitle("Notes")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) { Button("Save") { onSave(text); dismiss() } }
+                }
+        }
+    }
+}
+
+// Searchable exercise picker with free text
+private struct ExercisePickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var query: String = ""
+    let currentName: String
+    var onSelect: (String) -> Void
+    private var allNames: [String] { ExerciseLibrary.all }
+    private var filtered: [String] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        if q.isEmpty { return allNames }
+        return allNames.filter { $0.localizedCaseInsensitiveContains(q) }
+    }
+    var body: some View {
+        NavigationStack {
+            List {
+                if !query.isEmpty {
+                    Section {
+                        Button("Use “\(query)”") { onSelect(query); dismiss() }
+                    }
+                }
+                Section("All") {
+                    ForEach(filtered, id: \.self) { name in
+                        HStack {
+                            Text(name)
+                            Spacer()
+                            if name == currentName { Image(systemName: "checkmark").foregroundStyle(.secondary) }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { onSelect(name); dismiss() }
+                    }
+                }
+            }
+            .searchable(text: $query)
+            .navigationTitle("Choose Exercise")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+        }
+    }
+}
+// MARK: - Timers & Helpers
+extension WorkoutDetailView {
+    private func kgToLb(_ kg: Double?) -> Double {
+        guard let kg else { return 0 }
+        return (kg * 2.20462)
+    }
+
+    private func lbToKg(_ lb: Double?) -> Double? {
+        guard let lb else { return nil }
+        return (lb / 2.20462)
+    }
     private func startRestTimer(seconds: Int) {
         NotificationManager.scheduleRestDone(after: seconds)
+        let start = Date()
+        restStartAt = start
+        restEndAt = start.addingTimeInterval(TimeInterval(seconds))
     }
 
     private func previousFor(exerciseName: String, setNumber: Int) -> String? {
@@ -223,10 +378,27 @@ extension WorkoutDetailView {
     }
 
     private func finishWorkout() {
-        let elapsed = Int(max(0, Date().timeIntervalSince(workout.startedAt)))
+        let now = Date()
+        let elapsed = Int(max(0, now.timeIntervalSince(workout.startedAt)))
+        workout.finishedAt = now
         workout.durationSeconds = elapsed
         try? context.save()
         dismiss()
+    }
+
+    private func scheduleAutosave() {
+        saveWorkItem?.cancel()
+        let work = DispatchWorkItem { try? context.save() }
+        saveWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    private func triggerRestEndFeedback() {
+        // Short, subtle haptic + brief chime
+        let impact = UIImpactFeedbackGenerator(style: .rigid)
+        impact.prepare()
+        impact.impactOccurred(intensity: 1.0)
+        AudioServicesPlaySystemSound(1103) // Tock (very short)
     }
 }
 
@@ -237,5 +409,6 @@ extension WorkoutDetailView {
     WorkoutDetailView(workout: w)
         .modelContainer(container)
 }
+
 
 

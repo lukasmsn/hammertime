@@ -9,6 +9,7 @@ import UserNotifications
 enum NotificationManager {
     static func requestAuthorization() {
         let center = UNUserNotificationCenter.current()
+        center.delegate = ForegroundNotificationDelegate.shared
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             #if DEBUG
             if let error { print("[Notify] auth error: \(error)") }
@@ -31,6 +32,16 @@ enum NotificationManager {
             if let error { print("[Notify] schedule error: \(error)") }
             #endif
         }
+    }
+}
+
+// Ensure sound plays when app is in foreground
+final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = ForegroundNotificationDelegate()
+    private override init() { super.init() }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.sound])
     }
 }
 

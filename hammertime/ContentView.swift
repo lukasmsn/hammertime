@@ -12,10 +12,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Workout.startedAt, order: .reverse) private var workouts: [Workout]
     @State private var path = NavigationPath()
-    @State private var showCreate = false
     @State private var showTemplates = false
-    @State private var nameInput: String = ""
-    @State private var dateInput: Date = .now
     @State private var showingDeleteAlert = false
     @State private var workoutPendingDelete: Workout?
     @AppStorage("showSeedData") private var showSeedData = true
@@ -33,7 +30,7 @@ struct ContentView: View {
                         Text("Start by adding your first workout.")
                             .foregroundStyle(.secondary)
                         Button {
-                            showCreate = true
+                            startBlankWorkout()
                         } label: {
                             Label("Add Workout", systemImage: "plus")
                                 .font(.headline)
@@ -55,8 +52,8 @@ struct ContentView: View {
                         ForEach(workouts.filter { showSeedData || !$0.isSeed }) { w in
                             NavigationLink(value: w) {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(w.name).font(.headline)
-                                    Text(w.startedAt.formatted(date: .abbreviated, time: .shortened))
+                                    Text(titleFor(w)).font(.headline)
+                                    Text(statusLine(for: w))
                                         .foregroundStyle(.secondary)
                                 }
                             }
@@ -74,7 +71,11 @@ struct ContentView: View {
             }
             .navigationTitle("Workouts")
             .navigationDestination(for: Workout.self) { workout in
-                WorkoutDetailView(workout: workout)
+                if workout.finishedAt != nil {
+                    FinishedWorkoutView(workout: workout)
+                } else {
+                    WorkoutDetailView(workout: workout)
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -86,7 +87,7 @@ struct ContentView: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            Button(action: { showCreate = true }) {
+            Button(action: { startBlankWorkout() }) {
                 Image(systemName: "plus")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(.white)
@@ -101,26 +102,6 @@ struct ContentView: View {
             .padding(.trailing, 20)
             .padding(.bottom, 24)
         }
-        .sheet(isPresented: $showCreate) {
-            NavigationStack {
-                Form {
-                    Section("Details") {
-                        TextField("Workout name", text: $nameInput)
-                        DatePicker("Date", selection: $dateInput, displayedComponents: [.date, .hourAndMinute])
-                    }
-                }
-                .navigationTitle("New Workout")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") { cancelCreate() }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Create") { createWorkout() }
-                            .disabled(nameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-            }
-        }
         .sheet(isPresented: $showTemplates) {
             NavigationStack { TemplatesView(onStart: { template in startFromTemplate(template) }) }
                 .presentationDetents([.medium, .large])
@@ -133,24 +114,34 @@ struct ContentView: View {
         }
     }
 
-    private func createWorkout() {
-        let trimmed = nameInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        let workout = Workout(startedAt: dateInput, name: trimmed)
-        context.insert(workout)
-        try? context.save()
-        nameInput = ""
-        dateInput = .now
-        showCreate = false
-        DispatchQueue.main.async {
-            path.append(workout)
+    private func statusLine(for w: Workout) -> String {
+        if let finished = w.finishedAt, let dur = w.durationSeconds {
+            return "Finished • " + finished.formatted(date: .abbreviated, time: .shortened) + " • " + formatDuration(dur)
+        } else {
+            return "In Progress • " + w.startedAt.formatted(date: .abbreviated, time: .shortened)
         }
     }
 
-    private func cancelCreate() {
-        nameInput = ""
-        dateInput = .now
-        showCreate = false
+    private func formatDuration(_ seconds: Int) -> String {
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        let s = seconds % 60
+        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+        return String(format: "%d:%02d", m, s)
+    }
+
+    private func startBlankWorkout() {
+        let workout = Workout(startedAt: .now, name: "")
+        context.insert(workout)
+        try? context.save()
+        DispatchQueue.main.async { path.append(workout) }
+    }
+
+    private func titleFor(_ w: Workout) -> String {
+        if let first = w.exercises.sorted(by: { $0.position < $1.position }).first?.name, !first.isEmpty {
+            return first
+        }
+        return w.name.isEmpty ? "Workout" : w.name
     }
 
     private func startFromTemplate(_ template: WorkoutTemplate) {

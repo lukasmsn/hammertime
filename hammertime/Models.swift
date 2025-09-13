@@ -12,6 +12,7 @@ import SwiftData
 final class Workout {
     @Attribute(.unique) var id: UUID
     var startedAt: Date
+    var finishedAt: Date?
     var name: String
     var durationSeconds: Int?
     var notes: String?
@@ -20,10 +21,11 @@ final class Workout {
     var isSeed: Bool
     @Relationship(deleteRule: .cascade) var exercises: [Exercise]
 
-    init(id: UUID = UUID(), startedAt: Date, name: String, durationSeconds: Int? = nil, notes: String? = nil, bodyWeightKg: Double? = nil, sleepHours: Double? = nil, isSeed: Bool = false, exercises: [Exercise] = []) {
+    init(id: UUID = UUID(), startedAt: Date, name: String, finishedAt: Date? = nil, durationSeconds: Int? = nil, notes: String? = nil, bodyWeightKg: Double? = nil, sleepHours: Double? = nil, isSeed: Bool = false, exercises: [Exercise] = []) {
         self.id = id
         self.startedAt = startedAt
         self.name = name
+        self.finishedAt = finishedAt
         self.durationSeconds = durationSeconds
         self.notes = notes
         self.bodyWeightKg = bodyWeightKg

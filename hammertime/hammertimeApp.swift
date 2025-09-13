@@ -181,7 +181,10 @@ enum SeedData {
         ]
 
         for entry in entries {
-            let w = Workout(startedAt: entry.0, name: entry.1, durationSeconds: entry.2, notes: entry.3, bodyWeightKg: entry.4, sleepHours: entry.5, isSeed: true)
+            let started = entry.0
+            let duration = entry.2
+            let finished = duration.map { started.addingTimeInterval(TimeInterval($0)) }
+            let w = Workout(startedAt: started, name: entry.1, finishedAt: finished, durationSeconds: duration, notes: entry.3, bodyWeightKg: entry.4, sleepHours: entry.5, isSeed: true)
             context.insert(w)
             var posAcc = 0
             for exTuple in entry.6 {
