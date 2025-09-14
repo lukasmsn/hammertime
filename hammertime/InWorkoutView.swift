@@ -5,6 +5,7 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct InWorkoutView: View {
     @Environment(\.modelContext) private var context
@@ -32,27 +33,36 @@ struct InWorkoutView: View {
             if value.translation.width < -40 { goNext() }
             else if value.translation.width > 40 { goPrev() }
         })
+        .simultaneousGesture(DragGesture(minimumDistance: 20, coordinateSpace: .local).onEnded { value in
+            if value.translation.height > 40 { endEditing() }
+        })
         .safeAreaInset(edge: .bottom) { talkToCoachBar }
         .background(
             NavigationLink(isActive: $showChat) { ChatView() } label: { EmptyView() }
         )
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
 // MARK: - Header
 extension InWorkoutView {
     private func nextSetId(in sets: [SetEntry]) -> UUID? {
-        if let idx = sets.lastIndex(where: { $0.isLogged }) {
-            let next = sets.indices.contains(idx + 1) ? sets[idx + 1] : nil
-            return next?.id
-        } else {
-            return sets.first?.id
-        }
+        // Always highlight first unchecked set
+        if let firstUnchecked = sets.first(where: { !$0.isLogged }) { return firstUnchecked.id }
+        return sets.last?.id
+    }
+
+    private func canToggle(_ s: SetEntry, in sets: [SetEntry]) -> Bool {
+        // Allow unchecking any logged set; only the first unchecked set is tappable to check
+        if s.isLogged { return true }
+        return s.id == nextSetId(in: sets)
     }
 
     private func deleteSet(_ s: SetEntry) {
-        context.delete(s)
-        try? context.save()
+        withAnimation(.easeOut(duration: 0.08)) {
+            context.delete(s)
+            try? context.save()
+        }
     }
 
     private func toggleLogged(_ s: SetEntry) {
@@ -102,7 +112,8 @@ extension InWorkoutView {
                 }
                 .buttonStyle(PrimaryButtonStyle())
             }
-            .padding(.horizontal, 12)
+            .padding(.trailing, 24)
+            .padding(.top, 6)
         }
     }
 }
@@ -274,21 +285,22 @@ extension InWorkoutView {
             }
             .font(.system(size: 16, weight: .medium))
 
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 let sets = ex?.sets.sorted { $0.setNumber < $1.setNumber } ?? []
                 ForEach(sets) { s in
                     ExerciseSetRowView(
                         set: s,
                         isNext: s.id == nextSetId(in: sets),
                         onDelete: { deleteSet(s) },
-                        onToggleLogged: { toggleLogged(s) },
+                        onToggleLogged: { if canToggle(s, in: sets) { toggleLogged(s) } },
                         onChangeWeightLb: { newLb in updateWeight(set: s, pounds: newLb) },
                         onChangeReps: { newReps in updateReps(set: s, reps: newReps) }
                     )
                 }
             }
+            // No explicit transition; rely on withAnimation in add/delete to keep button and rows in sync
 
-            Button(action: { addSetToCurrentExercise() }) {
+            Button(action: { withAnimation(.easeOut(duration: 0.08)) { addSetToCurrentExercise() } }) {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")
                     Text("Set")
@@ -304,6 +316,7 @@ extension InWorkoutView {
             }
             .buttonStyle(.plain)
             .padding(.top, 8)
+            // Follows parent animation driven by withAnimation in add/delete
         }
         .padding(16)
         .background(
@@ -324,14 +337,19 @@ extension InWorkoutView {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .stroke(Color.black.opacity(0.05), lineWidth: 1)
             }
+            .compositingGroup()
+            .shadow(color: .black.opacity(0.0), radius: 49, x: 0, y: 173)
+            .shadow(color: .black.opacity(0.01), radius: 44, x: 0, y: 111)
+            .shadow(color: .black.opacity(0.02), radius: 37, x: 0, y: 62)
+            .shadow(color: .black.opacity(0.03), radius: 28, x: 0, y: 28)
+            .shadow(color: .black.opacity(0.04), radius: 15, x: 0, y: 7)
         )
-        .shadow(color: .black.opacity(0.0), radius: 49, x: 0, y: 173)
-        .shadow(color: .black.opacity(0.01), radius: 44, x: 0, y: 111)
-        .shadow(color: .black.opacity(0.02), radius: 37, x: 0, y: 62)
-        .shadow(color: .black.opacity(0.03), radius: 28, x: 0, y: 28)
-        .shadow(color: .black.opacity(0.04), radius: 15, x: 0, y: 7)
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
+        .padding(.horizontal, 24)
+        .padding(.top, 16)
+        .padding(.bottom, 24)
+        .allowsHitTesting(true)
+        .zIndex(1)
+        .animation(.easeOut(duration: 0.08), value: exercise(at: currentExerciseIndex)?.sets.count ?? 0)
     }
 }
 
@@ -369,34 +387,11 @@ private struct ExerciseSetRowView: View {
             .frame(width: 172, alignment: .trailing)
 
             // Log button
-            Group {
-                if set.isLogged {
-                    Circle()
-                        .fill(Color(UIColor.systemGray5))
-                        .frame(width: 36, height: 36)
-                        .overlay(Image(systemName: "checkmark").font(.system(size: 14, weight: .semibold)).foregroundStyle(Color(UIColor.systemGray)))
-                        .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
-                } else if isNext {
-                    Circle()
-                        .fill(Color.brandYellow)
-                        .frame(width: 42, height: 42)
-                        .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 6)
-                        .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
-                        .overlay(Image(systemName: "checkmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(.black))
-                        .onTapGesture { onToggleLogged() }
-                } else {
-                    Circle()
-                        .fill(Color(UIColor.systemGray6))
-                        .frame(width: 34, height: 34)
-                        .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
-                }
-            }
+            logButton
             .frame(width: 48, height: 48, alignment: .center)
         }
         .contentShape(Rectangle())
-        .highPriorityGesture(DragGesture(minimumDistance: 25).onEnded { value in
-            if value.translation.width < -40 { onDelete() }
-        })
+        .modifier(SwipeToDeleteModifier(onDelete: onDelete))
         .onAppear { syncTextFromModel() }
         .onChange(of: set.weightKg) { _, _ in syncTextFromModel() }
         .onChange(of: set.reps) { _, _ in syncTextFromModel() }
@@ -409,17 +404,130 @@ private struct ExerciseSetRowView: View {
     }
 
     private func numericPill(text: Binding<String>, placeholder: String, width: CGFloat, onChange: @escaping (Int?) -> Void) -> some View {
-        TextField(placeholder, text: text)
-            .keyboardType(.numberPad)
-            .font(.system(size: 20, weight: .medium))
-            .multilineTextAlignment(.center)
-            .frame(width: width, height: 48)
-            .background(Capsule().fill(Color.black.opacity(0.02)))
-            .onChange(of: text.wrappedValue) { _, newValue in
-                let filtered = newValue.filter { $0.isNumber }
-                if filtered != newValue { text.wrappedValue = filtered }
-                onChange(Int(filtered))
+        ZStack {
+            Capsule().fill(Color.black.opacity(0.02))
+            NumericField(text: text, placeholder: placeholder, onChange: onChange)
+                .frame(width: width, height: 48)
+        }
+        .frame(width: width, height: 48)
+    }
+}
+
+// MARK: - UIKit Numeric Field
+private struct NumericField: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let onChange: (Int?) -> Void
+
+    func makeUIView(context: Context) -> UITextField {
+        let tf = UITextField()
+        tf.keyboardType = .numberPad
+        tf.textAlignment = .center
+        tf.font = .systemFont(ofSize: 20, weight: .medium)
+        tf.placeholder = placeholder
+        tf.delegate = context.coordinator
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.selectAllOnTap))
+        tap.cancelsTouchesInView = false
+        tf.addGestureRecognizer(tap)
+        tf.addTarget(context.coordinator, action: #selector(Coordinator.editingChanged(_:)), for: .editingChanged)
+        return tf
+    }
+
+    func updateUIView(_ uiView: UITextField, context: Context) {
+        if uiView.text != text { uiView.text = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text, onChange: onChange) }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        @Binding var text: String
+        let onChange: (Int?) -> Void
+        init(text: Binding<String>, onChange: @escaping (Int?) -> Void) {
+            _text = text
+            self.onChange = onChange
+        }
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            textField.selectAll(nil)
+        }
+        @objc func selectAllOnTap(_ sender: UITapGestureRecognizer) {
+            if let tf = sender.view as? UITextField { tf.selectAll(nil) }
+        }
+        @objc func editingChanged(_ sender: UITextField) {
+            let filtered = (sender.text ?? "").filter { $0.isNumber }
+            if filtered != sender.text { sender.text = filtered }
+            text = filtered
+            onChange(Int(filtered))
+        }
+    }
+}
+
+// MARK: - Log Button Builder
+private extension ExerciseSetRowView {
+    @ViewBuilder
+    var logButton: some View {
+        if set.isLogged {
+            Circle()
+                .fill(Color.black.opacity(0.02))
+                .overlay(Image(systemName: "checkmark").font(.system(size: 18, weight: .semibold)).foregroundStyle(Color(UIColor.systemGray)))
+                .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
+                .onTapGesture {
+                    onToggleLogged()
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+        } else if isNext {
+            Circle()
+                .fill(Color.brandYellow)
+                .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 6)
+                .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
+                .overlay(Image(systemName: "checkmark").font(.system(size: 18, weight: .semibold)).foregroundStyle(.black))
+                .onTapGesture {
+                    onToggleLogged()
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+        } else {
+            Circle()
+                .fill(Color.black.opacity(0.02))
+                .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
+        }
+    }
+}
+
+// MARK: - Swipe to delete red feedback
+private struct SwipeToDeleteModifier: ViewModifier {
+    @State private var offsetX: CGFloat = 0
+    @State private var showRed: Bool = false
+    let onDelete: () -> Void
+    func body(content: Content) -> some View {
+        ZStack(alignment: .trailing) {
+            HStack(spacing: 0) {
+                Spacer()
+                Image(systemName: "trash")
+                    .foregroundStyle(Color.red)
+                    .font(.system(size: 18, weight: .semibold))
+                    .padding(12)
+                    .background(Color.clear)
+                    // Start fully outside (to the right), pull in as you swipe left
+                    .offset(x: 44 - min(44, -offsetX))
+                    .opacity(min(1, max(0, (-offsetX) / 12)))
             }
+            content
+                .background(Color.clear)
+                .offset(x: offsetX)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .gesture(DragGesture(minimumDistance: 25).onChanged { value in
+            offsetX = min(0, value.translation.width)
+            showRed = value.translation.width < -10
+        }.onEnded { value in
+            if value.translation.width < -60 {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+                withAnimation(.easeInOut(duration: 0.12)) { offsetX = -80; showRed = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { onDelete() }
+            } else {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { offsetX = 0; showRed = false }
+            }
+        })
     }
 }
 
@@ -503,7 +611,9 @@ extension InWorkoutView {
         let weightKg: Double? = last?.weightKg ?? lbToKg(30)
         let reps: Int? = last?.reps ?? 8
         let s = SetEntry(setNumber: nextNum, weightKg: weightKg, reps: reps, exercise: ex)
-        ex.sets.append(s)
+        withAnimation(.easeOut(duration: 0.08)) {
+            ex.sets.append(s)
+        }
         context.insert(s)
         try? context.save()
     }
@@ -511,6 +621,10 @@ extension InWorkoutView {
     private func lbToKg(_ lb: Double?) -> Double? {
         guard let lb else { return nil }
         return lb / 2.20462
+    }
+
+    private func endEditing() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 
