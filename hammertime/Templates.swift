@@ -53,6 +53,12 @@ enum TemplatesService {
         for te in template.exercises.sorted(by: { $0.position < $1.position }) {
             let ex = Exercise(name: te.name, position: te.position, workout: w)
             w.exercises.append(ex)
+            // Prefill three default sets so the UI shows rows immediately
+            let defaultKg = 30.0 / 2.20462 // 30 lb
+            for i in 1...3 {
+                let s = SetEntry(setNumber: i, weightKg: defaultKg, reps: 8, exercise: ex, isLogged: false)
+                ex.sets.append(s)
+            }
         }
         return w
     }

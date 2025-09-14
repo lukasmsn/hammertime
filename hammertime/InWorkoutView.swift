@@ -17,6 +17,7 @@ struct InWorkoutView: View {
         VStack(spacing: 0) {
             header
             progressBar
+            exerciseCard
             navRow
             Spacer(minLength: 0)
         }
@@ -40,6 +41,34 @@ struct InWorkoutView: View {
 
 // MARK: - Header
 extension InWorkoutView {
+    private func nextSetId(in sets: [SetEntry]) -> UUID? {
+        if let idx = sets.lastIndex(where: { $0.isLogged }) {
+            let next = sets.indices.contains(idx + 1) ? sets[idx + 1] : nil
+            return next?.id
+        } else {
+            return sets.first?.id
+        }
+    }
+
+    private func deleteSet(_ s: SetEntry) {
+        context.delete(s)
+        try? context.save()
+    }
+
+    private func toggleLogged(_ s: SetEntry) {
+        s.isLogged.toggle()
+        try? context.save()
+    }
+
+    private func updateWeight(set s: SetEntry, pounds: Int?) {
+        if let pounds { s.weightKg = lbToKg(Double(pounds)) } else { s.weightKg = nil }
+        try? context.save()
+    }
+
+    private func updateReps(set s: SetEntry, reps: Int?) {
+        s.reps = reps
+        try? context.save()
+    }
     private var header: some View {
         ZStack {
             // Center: title + live timer
@@ -103,16 +132,20 @@ extension InWorkoutView {
 // MARK: - Nav Row
 extension InWorkoutView {
     private var navRow: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .center, spacing: 0) {
             // Left target (previous exercise)
             let hasPrev = currentExerciseIndex - 1 >= 0
             Button(action: { goPrev() }) {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(exerciseName(at: currentExerciseIndex - 1))
                             .font(.system(size: 16))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         Text(exerciseSetsLabel(at: currentExerciseIndex - 1))
                             .font(.system(size: 14))
                             .foregroundStyle(.secondary)
@@ -123,20 +156,22 @@ extension InWorkoutView {
             }
             .disabled(!hasPrev)
             .opacity(hasPrev ? 1 : 0.4)
-
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
+            .tint(Color.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Middle list icon (inert)
             Button(action: {}) {
                 Image(systemName: "list.bullet")
                     .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.secondary)
                     .padding(8)
             }
             .disabled(true)
             .opacity(0.8)
-
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
+            .tint(Color.secondary)
+            .frame(width: 44)
 
             // Right target (next exercise)
             let hasNext = currentExerciseIndex + 1 < sortedExercises.count
@@ -145,21 +180,29 @@ extension InWorkoutView {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(exerciseName(at: currentExerciseIndex + 1))
                             .font(.system(size: 16))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                         Text(exerciseSetsLabel(at: currentExerciseIndex + 1))
                             .font(.system(size: 14))
                             .foregroundStyle(.secondary)
                     }
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 6)
             }
             .disabled(!hasNext)
             .opacity(hasNext ? 1 : 0.4)
+            .buttonStyle(.plain)
+            .tint(Color.secondary)
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -207,6 +250,176 @@ extension InWorkoutView {
         .buttonStyle(.plain)
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+    }
+}
+
+// MARK: - Exercise Card UI
+extension InWorkoutView {
+    private var exerciseCard: some View {
+        let ex = exercise(at: currentExerciseIndex)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(ex?.name ?? "")
+                .font(.system(size: 22, weight: .medium))
+
+            // header row: lbs / reps
+            HStack {
+                Text("")
+                    .frame(width: 24, alignment: .leading)
+                Spacer()
+                Text("lbs").foregroundStyle(.secondary)
+                    .frame(width: 80)
+                Text("reps").foregroundStyle(.secondary)
+                    .frame(width: 80)
+                Spacer().frame(width: 36)
+            }
+            .font(.system(size: 16, weight: .medium))
+
+            VStack(spacing: 12) {
+                let sets = ex?.sets.sorted { $0.setNumber < $1.setNumber } ?? []
+                ForEach(sets) { s in
+                    ExerciseSetRowView(
+                        set: s,
+                        isNext: s.id == nextSetId(in: sets),
+                        onDelete: { deleteSet(s) },
+                        onToggleLogged: { toggleLogged(s) },
+                        onChangeWeightLb: { newLb in updateWeight(set: s, pounds: newLb) },
+                        onChangeReps: { newReps in updateReps(set: s, reps: newReps) }
+                    )
+                }
+            }
+
+            Button(action: { addSetToCurrentExercise() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                    Text("Set")
+                }
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(Color.black.opacity(0.02))
+                )
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
+        }
+        .padding(16)
+        .background(
+            ZStack {
+                // base
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color.white)
+                // subtle brand yellow radial per Figma
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.brandYellow.opacity(0.05), Color.brandYellow.opacity(0.01)],
+                            center: .topTrailing,
+                            startRadius: 0,
+                            endRadius: 320
+                        )
+                    )
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.black.opacity(0.05), lineWidth: 1)
+            }
+        )
+        .shadow(color: .black.opacity(0.0), radius: 49, x: 0, y: 173)
+        .shadow(color: .black.opacity(0.01), radius: 44, x: 0, y: 111)
+        .shadow(color: .black.opacity(0.02), radius: 37, x: 0, y: 62)
+        .shadow(color: .black.opacity(0.03), radius: 28, x: 0, y: 28)
+        .shadow(color: .black.opacity(0.04), radius: 15, x: 0, y: 7)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+    }
+}
+
+// MARK: - Helpers for sets
+extension InWorkoutView {
+    private func exercise(at index: Int) -> Exercise? {
+        guard index >= 0 && index < sortedExercises.count else { return nil }
+        return sortedExercises[index]
+    }
+}
+
+private struct ExerciseSetRowView: View {
+    let set: SetEntry
+    let isNext: Bool
+    let onDelete: () -> Void
+    let onToggleLogged: () -> Void
+    let onChangeWeightLb: (Int?) -> Void
+    let onChangeReps: (Int?) -> Void
+
+    @State private var weightText: String = ""
+    @State private var repsText: String = ""
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("\(set.setNumber)")
+                .foregroundStyle(Color(UIColor.systemGray3))
+                .frame(width: 24, alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 8) {
+                numericPill(text: $weightText, placeholder: "-", width: 80) { newVal in onChangeWeightLb(newVal) }
+                numericPill(text: $repsText, placeholder: "-", width: 80) { newVal in onChangeReps(newVal) }
+            }
+            .frame(width: 172, alignment: .trailing)
+
+            // Log button
+            Group {
+                if set.isLogged {
+                    Circle()
+                        .fill(Color(UIColor.systemGray5))
+                        .frame(width: 36, height: 36)
+                        .overlay(Image(systemName: "checkmark").font(.system(size: 14, weight: .semibold)).foregroundStyle(Color(UIColor.systemGray)))
+                        .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
+                } else if isNext {
+                    Circle()
+                        .fill(Color.brandYellow)
+                        .frame(width: 42, height: 42)
+                        .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 6)
+                        .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
+                        .overlay(Image(systemName: "checkmark").font(.system(size: 16, weight: .semibold)).foregroundStyle(.black))
+                        .onTapGesture { onToggleLogged() }
+                } else {
+                    Circle()
+                        .fill(Color(UIColor.systemGray6))
+                        .frame(width: 34, height: 34)
+                        .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
+                }
+            }
+            .frame(width: 48, height: 48, alignment: .center)
+        }
+        .contentShape(Rectangle())
+        .highPriorityGesture(DragGesture(minimumDistance: 25).onEnded { value in
+            if value.translation.width < -40 { onDelete() }
+        })
+        .onAppear { syncTextFromModel() }
+        .onChange(of: set.weightKg) { _, _ in syncTextFromModel() }
+        .onChange(of: set.reps) { _, _ in syncTextFromModel() }
+    }
+
+    private func syncTextFromModel() {
+        let lb = set.weightKg.map { Int(round($0 * 2.20462)) }
+        weightText = lb.map { String($0) } ?? ""
+        repsText = set.reps.map { String($0) } ?? ""
+    }
+
+    private func numericPill(text: Binding<String>, placeholder: String, width: CGFloat, onChange: @escaping (Int?) -> Void) -> some View {
+        TextField(placeholder, text: text)
+            .keyboardType(.numberPad)
+            .font(.system(size: 20, weight: .medium))
+            .multilineTextAlignment(.center)
+            .frame(width: width, height: 48)
+            .background(Capsule().fill(Color.black.opacity(0.02)))
+            .onChange(of: text.wrappedValue) { _, newValue in
+                let filtered = newValue.filter { $0.isNumber }
+                if filtered != newValue { text.wrappedValue = filtered }
+                onChange(Int(filtered))
+            }
     }
 }
 
@@ -281,6 +494,23 @@ extension InWorkoutView {
         guard index >= 0 && index < sortedExercises.count else { return "" }
         let sets = sortedExercises[index].sets.count
         return "\(sets) sets"
+    }
+
+    private func addSetToCurrentExercise() {
+        guard let ex = exercise(at: currentExerciseIndex) else { return }
+        let nextNum = (ex.sets.map { $0.setNumber }.max() ?? 0) + 1
+        let last = ex.sets.max(by: { $0.setNumber < $1.setNumber })
+        let weightKg: Double? = last?.weightKg ?? lbToKg(30)
+        let reps: Int? = last?.reps ?? 8
+        let s = SetEntry(setNumber: nextNum, weightKg: weightKg, reps: reps, exercise: ex)
+        ex.sets.append(s)
+        context.insert(s)
+        try? context.save()
+    }
+
+    private func lbToKg(_ lb: Double?) -> Double? {
+        guard let lb else { return nil }
+        return lb / 2.20462
     }
 }
 
