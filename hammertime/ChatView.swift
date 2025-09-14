@@ -32,7 +32,7 @@ struct ChatView: View {
                                     .padding(12)
                                     .background(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .fill(LinearGradient(colors: [.orange.opacity(0.95), .orange], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                            .fill(.brandYellowPrimary)
                                     )
                             }
                         }

@@ -263,7 +263,7 @@ private struct RestCountdownBar: View {
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 6).fill(Color.gray.opacity(0.2))
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(LinearGradient(colors: [.orange, .red], startPoint: .leading, endPoint: .trailing))
+                        .fill(.brandYellowPrimary)
                         .frame(width: geo.size.width * pct)
                 }
                 .frame(height: 8)

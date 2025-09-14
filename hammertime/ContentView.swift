@@ -33,17 +33,9 @@ struct ContentView: View {
                             startBlankWorkout()
                         } label: {
                             Label("Add Workout", systemImage: "plus")
-                                .font(.headline)
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 16)
-                                .background(
-                                    Capsule().fill(
-                                        LinearGradient(colors: [.orange.opacity(0.95), .orange], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                    )
-                                )
-                                .foregroundStyle(.white)
-                                .shadow(color: .orange.opacity(0.3), radius: 12, x: 0, y: 8)
+                                .labelStyle(.titleAndIcon)
                         }
+                        .buttonStyle(PrimaryButtonStyle())
                         .padding(.top, 8)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -88,17 +80,9 @@ struct ContentView: View {
         }
         .overlay(alignment: .bottomTrailing) {
             Button(action: { startBlankWorkout() }) {
-                Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
-                    .background(
-                        Circle().fill(
-                            LinearGradient(colors: [.orange.opacity(0.95), .orange], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        )
-                    )
-                    .shadow(color: .orange.opacity(0.35), radius: 16, x: 0, y: 10)
+                Label(systemImage: "plus")
             }
+            .buttonStyle(PrimaryButtonStyle())
             .padding(.trailing, 20)
             .padding(.bottom, 24)
         }
