@@ -40,7 +40,16 @@ enum TemplatesService {
     }
 
     static func instantiate(_ template: WorkoutTemplate, date: Date = .now) -> Workout {
-        let w = Workout(startedAt: date, name: template.name)
+        let w = Workout(
+            startedAt: date,
+            name: template.name,
+            finishedAt: nil,
+            durationSeconds: nil,
+            notes: nil,
+            bodyWeightKg: nil,
+            sleepHours: nil,
+            isSeed: false
+        )
         for te in template.exercises.sorted(by: { $0.position < $1.position }) {
             let ex = Exercise(name: te.name, position: te.position, workout: w)
             w.exercises.append(ex)

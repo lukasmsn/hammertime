@@ -74,7 +74,7 @@ struct ContentView: View {
                 if workout.finishedAt != nil {
                     FinishedWorkoutView(workout: workout)
                 } else {
-                    WorkoutDetailView(workout: workout)
+                    InWorkoutView(workout: workout)
                 }
             }
             .toolbar {
