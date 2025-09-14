@@ -11,11 +11,13 @@ struct InWorkoutView: View {
     @Environment(\.dismiss) private var dismiss
     @State var workout: Workout
     @State private var currentExerciseIndex: Int = 0
+    @State private var showChat = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
             progressBar
+            navRow
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -24,6 +26,15 @@ struct InWorkoutView: View {
         .navigationTitle("")
         .background(BackSwipeDisabledView(disable: true))
         .onAppear { syncCurrentExerciseIndex() }
+        .contentShape(Rectangle())
+        .gesture(DragGesture(minimumDistance: 20, coordinateSpace: .local).onEnded { value in
+            if value.translation.width < -40 { goNext() }
+            else if value.translation.width > 40 { goPrev() }
+        })
+        .safeAreaInset(edge: .bottom) { talkToCoachBar }
+        .background(
+            NavigationLink(isActive: $showChat) { ChatView() } label: { EmptyView() }
+        )
     }
 }
 
@@ -89,6 +100,116 @@ extension InWorkoutView {
     }
 }
 
+// MARK: - Nav Row
+extension InWorkoutView {
+    private var navRow: some View {
+        HStack(alignment: .center) {
+            // Left target (previous exercise)
+            let hasPrev = currentExerciseIndex - 1 >= 0
+            Button(action: { goPrev() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(exerciseName(at: currentExerciseIndex - 1))
+                            .font(.system(size: 16))
+                        Text(exerciseSetsLabel(at: currentExerciseIndex - 1))
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+            }
+            .disabled(!hasPrev)
+            .opacity(hasPrev ? 1 : 0.4)
+
+            Spacer(minLength: 0)
+
+            // Middle list icon (inert)
+            Button(action: {}) {
+                Image(systemName: "list.bullet")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .padding(8)
+            }
+            .disabled(true)
+            .opacity(0.8)
+
+            Spacer(minLength: 0)
+
+            // Right target (next exercise)
+            let hasNext = currentExerciseIndex + 1 < sortedExercises.count
+            Button(action: { goNext() }) {
+                HStack(spacing: 6) {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(exerciseName(at: currentExerciseIndex + 1))
+                            .font(.system(size: 16))
+                        Text(exerciseSetsLabel(at: currentExerciseIndex + 1))
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+            }
+            .disabled(!hasNext)
+            .opacity(hasNext ? 1 : 0.4)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Talk to Coach Bar
+extension InWorkoutView {
+    private var talkToCoachBar: some View {
+        Button(action: { showChat = true }) {
+            HStack {
+                Text("Talk to your coach")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 20)
+            .frame(height: 50)
+            .background(
+                ZStack {
+                    // Base white card
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(Color.white)
+                    // Subtle brand yellow radial gradient (Figma: #E8FF1C @ 5% → 1%)
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(
+                            RadialGradient(
+                                colors: [Color.brandYellow.opacity(0.05), Color.brandYellow.opacity(0.01)],
+                                center: .topTrailing,
+                                startRadius: 0,
+                                endRadius: 220
+                            )
+                        )
+                    // Border
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.01), radius: 71, x: 0, y: 252)
+                .shadow(color: .black.opacity(0.01), radius: 44, x: 0, y: 111)
+                .shadow(color: .black.opacity(0.02), radius: 37, x: 0, y: 62)
+                .shadow(color: .black.opacity(0.03), radius: 28, x: 0, y: 28)
+                .shadow(color: .black.opacity(0.04), radius: 15, x: 0, y: 7)
+            )
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+    }
+}
+
 // MARK: - Actions
 extension InWorkoutView {
     private func finishWorkout() {
@@ -139,6 +260,27 @@ extension InWorkoutView {
 
     private func syncCurrentExerciseIndex() {
         currentExerciseIndex = firstActiveExerciseIndex()
+    }
+
+    private func goPrev() {
+        guard currentExerciseIndex > 0 else { return }
+        currentExerciseIndex -= 1
+    }
+
+    private func goNext() {
+        guard currentExerciseIndex + 1 < sortedExercises.count else { return }
+        currentExerciseIndex += 1
+    }
+
+    private func exerciseName(at index: Int) -> String {
+        guard index >= 0 && index < sortedExercises.count else { return "" }
+        return sortedExercises[index].name
+    }
+
+    private func exerciseSetsLabel(at index: Int) -> String {
+        guard index >= 0 && index < sortedExercises.count else { return "" }
+        let sets = sortedExercises[index].sets.count
+        return "\(sets) sets"
     }
 }
 

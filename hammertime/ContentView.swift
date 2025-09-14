@@ -80,7 +80,7 @@ struct ContentView: View {
         }
         .overlay(alignment: .bottomTrailing) {
             Button(action: { startBlankWorkout() }) {
-                Label(systemImage: "plus")
+                Label("Add Workout", systemImage: "plus")
             }
             .buttonStyle(PrimaryButtonStyle())
             .padding(.trailing, 20)
