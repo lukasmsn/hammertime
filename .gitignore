@@ -1,3 +1,8 @@
+# Secrets
+# Secrets
+Configurations/Secrets.xcconfig
+**/AppSecrets.plist
+
 # Secrets - NEVER commit these files
 Configurations/Secrets.xcconfig
 Secrets.xcconfig

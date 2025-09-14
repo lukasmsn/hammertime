@@ -67,6 +67,8 @@ struct RootView: View {
                 print("[Seed] Error: \(error)")
                 #endif
             }
+            // Initial pull from Supabase (idempotent). Safe if not configured.
+            await SupabaseService.shared.pullAllAndMergeIntoLocal(context: context)
             didSeed = true
         }
     }

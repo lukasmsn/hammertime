@@ -1141,6 +1141,7 @@ extension InWorkoutView {
         workout.finishedAt = now
         workout.durationSeconds = elapsed
         try? context.save()
+        Task { await SupabaseService.shared.pushWorkout(workout) }
         dismiss()
     }
 }

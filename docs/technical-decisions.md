@@ -81,16 +81,28 @@ Error handling:
 - Persist: save user and assistant messages in local `Message`
 - Future: move to Supabase + Edge Function when backend added
 
-### 6.1) Supabase (deferred reference)
+### 6.1) Supabase
 
-- When adding a backend, target schema:
+- Backend schema (MVP target):
   - `workouts(id uuid pk, user_id uuid, started_at timestamptz, name text, duration_seconds int, notes text)`
   - `exercises(id uuid pk, user_id uuid, workout_id uuid fk, name text, position int, notes text)`
   - `sets(id uuid pk, user_id uuid, exercise_id uuid fk, set_number int, weight_kg numeric, reps int, distance_m numeric, seconds int, rpe numeric, notes text)`
   - `messages(id uuid pk, user_id uuid, role text, content text, created_at timestamptz, thread_id uuid)`
 - Cascades: delete workout → exercises → sets
 - Unique constraints for dedupe: `(user_id, started_at, name)`, `(workout_id, name, position)`, `(exercise_id, set_number)`
-- RLS/auth added later; Edge Function can proxy OpenAI if desired
+- No auth in MVP; `client_id` stored from `identifierForVendor` to segregate data. RLS/auth later.
+
+### 6.2) External Services configs
+
+- OpenAI key is provided via `Configurations/Secrets.xcconfig` → Info.plist key `OPENAI_API_KEY`.
+- Supabase is configured via `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `Configurations/Secrets.xcconfig` → Info.plist keys `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
+
+### 6.3) Data Sync flow (MVP)
+
+- Local primary store: SwiftData.
+- Pull on app launch: `SupabaseService.pullAllAndMergeIntoLocal()` merges remote workouts by id.
+- Push on workout completion: `SupabaseService.pushWorkout()` upserts rows via PostgREST.
+- No realtime or conflict resolution yet; idempotent by UUID.
 
 ### 7) Environment and secrets (Xcode)
 

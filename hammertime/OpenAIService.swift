@@ -36,7 +36,8 @@ final class OpenAIService {
     func singleShotReply(contextLines: [String], userMessage: String) async throws -> String {
         let bundleKey = Bundle.main.infoDictionary?["OPENAI_API_KEY"] as? String
         let envKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
-        let apiKey = (bundleKey?.isEmpty == false ? bundleKey : nil) ?? (envKey?.isEmpty == false ? envKey : nil)
+        let plistKey = SecretsLoader.shared.value(for: "OPENAI_API_KEY")
+        let apiKey = (bundleKey?.isEmpty == false ? bundleKey : nil) ?? (envKey?.isEmpty == false ? envKey : nil) ?? (plistKey?.isEmpty == false ? plistKey : nil)
         #if DEBUG
         if let bundleKey, !bundleKey.isEmpty { print("[OpenAI] Found key in Info.plist (len=\(bundleKey.count))") }
         if let envKey, !envKey.isEmpty { print("[OpenAI] Found key in ENV (len=\(envKey.count))") }
@@ -105,7 +106,8 @@ final class OpenAIService {
     func replyWithHistory(contextLines: [String], history: [(role: String, content: String)]) async throws -> String {
         let bundleKey = Bundle.main.infoDictionary?["OPENAI_API_KEY"] as? String
         let envKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
-        let apiKey = (bundleKey?.isEmpty == false ? bundleKey : nil) ?? (envKey?.isEmpty == false ? envKey : nil)
+        let plistKey = SecretsLoader.shared.value(for: "OPENAI_API_KEY")
+        let apiKey = (bundleKey?.isEmpty == false ? bundleKey : nil) ?? (envKey?.isEmpty == false ? envKey : nil) ?? (plistKey?.isEmpty == false ? plistKey : nil)
         #if DEBUG
         if let bundleKey, !bundleKey.isEmpty { print("[OpenAI] Found key in Info.plist (len=\(bundleKey.count))") }
         if let envKey, !envKey.isEmpty { print("[OpenAI] Found key in ENV (len=\(envKey.count))") }

@@ -78,6 +78,7 @@
 
 - No backend means data is device-only until Supabase is added.
 - OpenAI key in app (acceptable for personal prototype). Keep `Secrets.xcconfig` git-ignored.
+- Add Supabase keys to `Secrets.xcconfig` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) and expose via Info.plist substitution. If missing, app runs local-only.
 - Streaming deferred.
 
 ### Xcode env handling (OpenAI key) — performed in Chat phase
