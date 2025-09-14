@@ -92,7 +92,7 @@ struct InWorkoutView: View {
         .simultaneousGesture(DragGesture(minimumDistance: 20, coordinateSpace: .local).onEnded { value in
             if value.translation.height > 40 { endEditing() }
         })
-        .safeAreaInset(edge: .bottom) { talkToCoachBar }
+        .safeAreaInset(edge: .bottom) { bottomBar }
         .background(
             NavigationLink(isActive: $showChat) { ChatView() } label: { EmptyView() }
         )
@@ -191,13 +191,6 @@ extension InWorkoutView {
                         .frame(width: 48, height: 48)
                         .background(Circle().fill(Color.black.opacity(0.02)))
                 }
-                Button(action: {}) {
-                    Image(systemName: "list.bullet")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(.black)
-                        .frame(width: 48, height: 48)
-                        .background(Circle().fill(Color.black.opacity(0.02)))
-                }
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -205,15 +198,12 @@ extension InWorkoutView {
             // Trailing: Finish
             HStack {
                 Spacer()
-                Button(action: finishWorkout) {
-                    Text("Finish")
+                Button(action: {}) {
+                    Image(systemName: "list.bullet")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(isAllSetsCompleted ? .black : .black)
-                        .padding(.horizontal, 14)
-                        .frame(height: 48)
-                        .background(
-                            isAllSetsCompleted ? AnyView(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.brandYellowPrimary)) : AnyView(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.black.opacity(0.02)))
-                        )
+                        .foregroundStyle(.black)
+                        .frame(width: 48, height: 48)
+                        .background(Circle().fill(Color.black.opacity(0.02)))
                 }
             }
             .padding(.horizontal, 12)
@@ -316,46 +306,69 @@ extension InWorkoutView {
 
 // MARK: - Talk to Coach Bar
 extension InWorkoutView {
-    private var talkToCoachBar: some View {
-        Button(action: { showChat = true }) {
-            HStack {
-                Text("Talk to your coach")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 20)
-            .frame(height: 50)
-            .background(
-                ZStack {
-                    // Base white card
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(Color.white)
-                    // Subtle brand yellow radial gradient (Figma: #E8FF1C @ 5% → 1%)
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(
-                            RadialGradient(
-                                colors: [Color.brandYellow.opacity(0.05), Color.brandYellow.opacity(0.01)],
-                                center: .topTrailing,
-                                startRadius: 0,
-                                endRadius: 220
-                            )
+    private var bottomBar: some View {
+        HStack(spacing: 12) {
+            // Talk to your coach
+            if isAllSetsCompleted {
+                Button(action: { showChat = true }) {
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(Color(UIColor.systemGray))
+                        .frame(width: 48, height: 48)
+                        .background(
+                            Circle().fill(Color.white)
                         )
-                    // Border
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                        .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
                 }
-                .shadow(color: .black.opacity(0.01), radius: 71, x: 0, y: 252)
-                .shadow(color: .black.opacity(0.01), radius: 44, x: 0, y: 111)
-                .shadow(color: .black.opacity(0.02), radius: 37, x: 0, y: 62)
-                .shadow(color: .black.opacity(0.03), radius: 28, x: 0, y: 28)
-                .shadow(color: .black.opacity(0.04), radius: 15, x: 0, y: 7)
-            )
+                .buttonStyle(.plain)
+            } else {
+                Button(action: { showChat = true }) {
+                    HStack {
+                        Text("Talk to your coach")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 20)
+                    .frame(height: 50)
+                    .background(
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white)
+                            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(RadialGradient(colors: [Color.brandYellow.opacity(0.05), Color.brandYellow.opacity(0.01)], center: .topTrailing, startRadius: 0, endRadius: 220))
+                            RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.black.opacity(0.05), lineWidth: 1)
+                        }
+                        .shadow(color: .black.opacity(0.01), radius: 71, x: 0, y: 252)
+                        .shadow(color: .black.opacity(0.01), radius: 44, x: 0, y: 111)
+                        .shadow(color: .black.opacity(0.02), radius: 37, x: 0, y: 62)
+                        .shadow(color: .black.opacity(0.03), radius: 28, x: 0, y: 28)
+                        .shadow(color: .black.opacity(0.04), radius: 15, x: 0, y: 7)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Finish primary (only when all sets completed)
+            if isAllSetsCompleted {
+                Button(action: finishWorkout) {
+                    Text("Finish")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .fill(.brandYellowPrimary)
+                                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.black.opacity(0.05), lineWidth: 1))
+                                .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 6)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
     }
@@ -707,7 +720,7 @@ private extension ExerciseSetRowView {
         if set.isLogged {
             Circle()
                 .fill(Color.black.opacity(0.02))
-                .overlay(Image(systemName: "checkmark").font(.system(size: 18, weight: .semibold)).foregroundStyle(Color(UIColor.systemGray)))
+                .overlay(Image(systemName: "checkmark").font(.system(size: 18, weight: .semibold)).foregroundStyle(.black))
                 .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
                 .onTapGesture {
                     onToggleLogged()
@@ -720,6 +733,7 @@ private extension ExerciseSetRowView {
                 .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
                 .overlay(Image(systemName: "checkmark").font(.system(size: 18, weight: .semibold)).foregroundStyle(.black))
                 .onTapGesture {
+                    let gen = UINotificationFeedbackGenerator(); gen.notificationOccurred(.success)
                     onToggleLogged()
                     onNextSetLogged()
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
