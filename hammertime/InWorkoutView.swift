@@ -13,12 +13,15 @@ struct InWorkoutView: View {
     @State var workout: Workout
     @State private var currentExerciseIndex: Int = 0
     @State private var showChat = false
+    @State private var restEndAt: Date? = nil
+    @State private var restDurationSeconds: Int = 90
+    @State private var restAnchorSetId: UUID? = nil
 
     var body: some View {
         VStack(spacing: 0) {
             header
             progressBar
-            exerciseCard
+            currentExerciseSection
             navRow
             Spacer(minLength: 0)
         }
@@ -46,6 +49,7 @@ struct InWorkoutView: View {
 
 // MARK: - Header
 extension InWorkoutView {
+    private var currentExerciseSection: some View { exerciseCard }
     private func nextSetId(in sets: [SetEntry]) -> UUID? {
         // Always highlight first unchecked set
         if let firstUnchecked = sets.first(where: { !$0.isLogged }) { return firstUnchecked.id }
@@ -78,6 +82,11 @@ extension InWorkoutView {
     private func updateReps(set s: SetEntry, reps: Int?) {
         s.reps = reps
         try? context.save()
+    }
+    private func startRest(anchorSetId: UUID) {
+        restDurationSeconds = 90
+        restAnchorSetId = anchorSetId
+        restEndAt = Date().addingTimeInterval(TimeInterval(restDurationSeconds))
     }
     private var header: some View {
         ZStack {
@@ -294,8 +303,17 @@ extension InWorkoutView {
                         onDelete: { deleteSet(s) },
                         onToggleLogged: { if canToggle(s, in: sets) { toggleLogged(s) } },
                         onChangeWeightLb: { newLb in updateWeight(set: s, pounds: newLb) },
-                        onChangeReps: { newReps in updateReps(set: s, reps: newReps) }
+                        onChangeReps: { newReps in updateReps(set: s, reps: newReps) },
+                        onNextSetLogged: { startRest(anchorSetId: s.id) }
                     )
+                    // Inline rest row directly after the just-completed set
+                    if let end = restEndAt, end > Date(), restAnchorSetId == s.id {
+                        RestBar(endAt: end, total: restDurationSeconds) {
+                            let gen = UINotificationFeedbackGenerator(); gen.notificationOccurred(.success)
+                            withAnimation(.easeOut(duration: 0.2)) { restEndAt = nil; restAnchorSetId = nil }
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                 }
             }
             // No explicit transition; rely on withAnimation in add/delete to keep button and rows in sync
@@ -368,6 +386,7 @@ private struct ExerciseSetRowView: View {
     let onToggleLogged: () -> Void
     let onChangeWeightLb: (Int?) -> Void
     let onChangeReps: (Int?) -> Void
+    let onNextSetLogged: () -> Void
 
     @State private var weightText: String = ""
     @State private var repsText: String = ""
@@ -461,6 +480,58 @@ private struct NumericField: UIViewRepresentable {
     }
 }
 
+// MARK: - Rest Bar
+private struct RestBar: View {
+    let endAt: Date
+    let total: Int
+    let onComplete: () -> Void
+    @State private var nowTick: Date = .now
+    @State private var progress: CGFloat = 1
+    var body: some View {
+        let remaining = max(0, Int(endAt.timeIntervalSince(nowTick)))
+        ZStack(alignment: .center) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    // Track (gray)
+                    RoundedRectangle(cornerRadius: 99, style: .continuous)
+                        .fill(Color.black.opacity(0.02))
+                        .frame(height: 24)
+                        // .overlay(
+                        //     RoundedRectangle(cornerRadius: 99, style: .continuous)
+                        //         .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                        // )
+                    // Fill (yellow) shrinks from full width to zero smoothly
+                    RoundedRectangle(cornerRadius: 99, style: .continuous)
+                        .fill(Color.brandYellow)
+                        .frame(width: geo.size.width * progress, height: 24)
+                }
+            }
+            // Time label centered over the bar
+            Text(timeString(remaining))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.primary)
+        }
+        .frame(height: 24)
+        .onAppear { startSmoothAnimation() }
+        .onChange(of: endAt) { _, _ in startSmoothAnimation() }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now in
+            nowTick = now
+            if endAt <= now { onComplete() }
+        }
+    }
+    private func timeString(_ seconds: Int) -> String {
+        let m = seconds / 60
+        let s = seconds % 60
+        return String(format: "%d:%02d", m, s)
+    }
+    private func startSmoothAnimation() {
+        let remaining = max(0, endAt.timeIntervalSince(.now))
+        let initial = CGFloat(min(1, max(0, remaining / Double(max(1, total)))))
+        progress = initial
+        withAnimation(.linear(duration: remaining)) { progress = 0 }
+    }
+}
+
 // MARK: - Log Button Builder
 private extension ExerciseSetRowView {
     @ViewBuilder
@@ -482,6 +553,7 @@ private extension ExerciseSetRowView {
                 .overlay(Image(systemName: "checkmark").font(.system(size: 18, weight: .semibold)).foregroundStyle(.black))
                 .onTapGesture {
                     onToggleLogged()
+                    onNextSetLogged()
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
         } else {
