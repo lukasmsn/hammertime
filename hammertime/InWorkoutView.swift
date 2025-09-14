@@ -25,6 +25,7 @@ struct InWorkoutView: View {
     @State private var isDragging: Bool = false
     @State private var isChatTab: Bool = true
     @State private var isKeyboardExpanded: Bool = false
+    @State private var isRestPickerPresented: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -52,6 +53,16 @@ struct InWorkoutView: View {
             Button("OK", role: .cancel) { }
         } message: { Text(chatErrorText ?? "") }
         .toolbar(.hidden, for: .tabBar)
+        .sheet(isPresented: $isRestPickerPresented) {
+            RestDurationPicker(totalSeconds: restDurationSeconds) { newTotal in
+                restDurationSeconds = newTotal
+                if let end = restEndAt, end > Date() {
+                    restEndAt = Date().addingTimeInterval(TimeInterval(newTotal))
+                }
+            } onCancel: { }
+            .presentationDetents([.height(260)])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private var topHeaderSection: some View {
@@ -114,9 +125,10 @@ struct InWorkoutView: View {
             onWeight: { set, lb in updateWeight(set: set, pounds: lb) },
             onReps: { set, reps in updateReps(set: set, reps: reps) },
             onStartRest: { id in startRest(anchorSetId: id) },
-            onCompleteRest: { withAnimation(.easeOut(duration: 0.2)) { restEndAt = nil; restAnchorSetId = nil } },
+            onCompleteRest: { },
             onAddSet: { addSetToCurrentExercise() },
             onRemoveSet: { removeLastSetFromCurrentExercise() },
+            onTapTimer: { isRestPickerPresented = true },
             visibleSetId: nextSetId(in: exercise(at: currentExerciseIndex)?.sets.sorted { $0.setNumber < $1.setNumber } ?? []),
             showAddSetButton: false
         )
@@ -200,9 +212,10 @@ extension InWorkoutView {
                                   onWeight: { set, lb in updateWeight(set: set, pounds: lb) },
                                   onReps: { set, reps in updateReps(set: set, reps: reps) },
                                   onStartRest: { id in startRest(anchorSetId: id) },
-                                  onCompleteRest: { restEndAt = nil; restAnchorSetId = nil },
+                                  onCompleteRest: { },
                                   onAddSet: { if isActive { addSetToCurrentExercise() } },
                                   onRemoveSet: { if isActive { removeLastSetFromCurrentExercise() } },
+                                  onTapTimer: { isRestPickerPresented = true },
                                   visibleSetId: nil,
                                   showAddSetButton: true)
         .onTapGesture { if isChatOpen { closeChat() } }
@@ -595,29 +608,38 @@ extension InWorkoutView {
             Text(ex?.name ?? "")
                 .font(.system(size: 22, weight: .medium))
 
-            // Sets count control row
-            let setsCount = ex?.sets.count ?? 0
-            Menu {
-                Button(role: .none) { addSetToCurrentExercise() } label: {
-                    Label("Increase", systemImage: "plus")
+            // Sets count control row + rest timer pill
+            HStack(spacing: 8) {
+                let setsCount = ex?.sets.count ?? 0
+                Menu {
+                    Button(role: .none) { addSetToCurrentExercise() } label: {
+                        Label("Increase", systemImage: "plus")
+                    }
+                    Button(role: .none) { removeLastSetFromCurrentExercise() } label: {
+                        Label("Decrease", systemImage: "minus")
+                    }
+                    .disabled(setsCount == 0)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("\(setsCount) Sets")
+                    }
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .fill(Color.black.opacity(0.02))
+                    )
+                    .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
                 }
-                Button(role: .none) { removeLastSetFromCurrentExercise() } label: {
-                    Label("Decrease", systemImage: "minus")
+                Button(action: { isRestPickerPresented = true }) {
+                    RestTimerPill(endAt: restEndAt, total: restDurationSeconds) {
+                        // keep timer visible for over-time; no-op on completion
+                    }
                 }
-                .disabled(setsCount == 0)
-            } label: {
-                HStack(spacing: 6) {
-                    Text("\(setsCount) Sets")
-                }
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(.black)
+                .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(Color.black.opacity(0.02))
-                )
-                .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
             }
 
             // header row: lbs / reps
@@ -645,17 +667,19 @@ extension InWorkoutView {
                         onChangeReps: { newReps in updateReps(set: s, reps: newReps) },
                         onNextSetLogged: { startRest(anchorSetId: s.id) }
                     )
-                    // Inline rest row directly after the just-completed set
-                    if let end = restEndAt, end > Date(), restAnchorSetId == s.id {
-                        RestBar(endAt: end, total: restDurationSeconds) {
-                            let gen = UINotificationFeedbackGenerator(); gen.notificationOccurred(.success)
-                            withAnimation(.easeOut(duration: 0.2)) { restEndAt = nil; restAnchorSetId = nil }
-                        }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
                 }
             }
             // No explicit transition; rely on withAnimation in add/delete to keep rows in sync
+        }
+        .sheet(isPresented: $isRestPickerPresented) {
+            RestDurationPicker(totalSeconds: restDurationSeconds) { newTotal in
+                restDurationSeconds = newTotal
+                if let end = restEndAt, end > Date() {
+                    restEndAt = Date().addingTimeInterval(TimeInterval(newTotal))
+                }
+            } onCancel: { }
+            .presentationDetents([.height(260)])
+            .presentationDragIndicator(.visible)
         }
         .padding(0)
         .background(
@@ -851,6 +875,64 @@ private struct RestBar: View {
     }
 }
 
+// MARK: - Rest Timer Pill (compact, always visible)
+private struct RestTimerPill: View {
+    let endAt: Date?
+    let total: Int
+    let onComplete: () -> Void
+    @State private var nowTick: Date = .now
+    var body: some View {
+        GeometryReader { geo in
+            let isRunning: Bool = {
+                guard let endAt else { return false }
+                return endAt > nowTick
+            }()
+            let remaining: Int = {
+                guard let endAt else { return total }
+                return Int(endAt.timeIntervalSince(nowTick))
+            }()
+            let secondsAbs = abs(remaining)
+            let minutes = secondsAbs / 60
+            let seconds = secondsAbs % 60
+            let isOvertime = (endAt != nil && remaining <= 0)
+            let fractionRemaining: CGFloat = {
+                guard let endAt else { return 0 }
+                let rem = max(0, endAt.timeIntervalSince(nowTick))
+                let denom = Double(max(1, total))
+                return CGFloat(min(1, max(0, rem / denom)))
+            }()
+            let label = {
+                if endAt == nil { return String(format: "%d:%02d", total / 60, total % 60) }
+                if isOvertime { return String(format: "-%d:%02d", minutes, seconds) }
+                return String(format: "%d:%02d", minutes, seconds)
+            }()
+
+            ZStack(alignment: .leading) {
+                // Base gray pill
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color.black.opacity(0.02))
+
+                // Yellow shrinking fill while running
+                if isRunning {
+                    Rectangle()
+                        .fill(Color.brandYellow)
+                        .frame(width: geo.size.width * fractionRemaining, height: geo.size.height)
+                }
+
+                // Label centered
+                HStack { Spacer(); Text(label).font(.system(size: 18, weight: .medium)).foregroundStyle(isOvertime ? Color.secondary : Color.black); Spacer() }
+            }
+            .frame(height: 44)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .onReceive(Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()) { now in
+                nowTick = now
+                if let endAt, now >= endAt { onComplete() }
+            }
+        }
+        .frame(height: 44)
+    }
+}
+
 // MARK: - Readonly Card for Peek
 private struct ExerciseCardRender: View {
     let exercise: Exercise?
@@ -867,6 +949,7 @@ private struct ExerciseCardRender: View {
     let onCompleteRest: () -> Void
     let onAddSet: () -> Void
     let onRemoveSet: () -> Void
+    let onTapTimer: () -> Void
     let visibleSetId: UUID?
     let showAddSetButton: Bool
 
@@ -882,37 +965,48 @@ private struct ExerciseCardRender: View {
             Text(exercise?.name ?? "")
                 .font(.system(size: 22, weight: .medium))
 
-            // Sets count control row
-            let setsCount = exercise?.sets.count ?? 0
-            Menu {
-                Button(role: .none) { onAddSet() } label: {
-                    Label("Increase", systemImage: "plus")
+            // Sets count control row + rest timer pill (above lbs/reps)
+            HStack(spacing: 8) {
+                let setsCount = exercise?.sets.count ?? 0
+                Menu {
+                    Button(role: .none) { onAddSet() } label: {
+                        Label("Increase", systemImage: "plus")
+                    }
+                    Button(role: .none) { onRemoveSet() } label: {
+                        Label("Decrease", systemImage: "minus")
+                    }
+                    .disabled(setsCount == 0)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("\(setsCount) Sets")
+                    }
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.black.opacity(0.02)))
+                    .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
                 }
-                Button(role: .none) { onRemoveSet() } label: {
-                    Label("Decrease", systemImage: "minus")
+                Button(action: onTapTimer) {
+                    RestTimerPill(endAt: restEndAt, total: total) {
+                        // keep timer visible for over-time; no-op on completion
+                    }
                 }
-                .disabled(setsCount == 0)
-            } label: {
-                HStack(spacing: 6) {
-                    Text("\(setsCount) Sets")
-                }
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(.black)
+                .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.black.opacity(0.02)))
-                .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
             }
             if visibleSetId == nil { // show lbs/reps header only in full mode
                 HStack {
                     Text("").frame(width: 24)
                     Spacer()
-                    Text("lbs").foregroundStyle(.secondary).frame(width: 80)
-                    Text("reps").foregroundStyle(.secondary).frame(width: 80)
-                    Spacer().frame(width: 36)
+                    Text("lbs").foregroundStyle(Color.secondary.opacity(0.7)).frame(width: 80)
+                    Text("reps").foregroundStyle(Color.secondary.opacity(0.7)).frame(width: 80)
+                    Spacer().frame(width: 64)
                 }
                 .font(.system(size: 16, weight: .medium))
             }
+
+            
 
             VStack(spacing: 8) {
                 ForEach(sets) { s in
@@ -925,10 +1019,6 @@ private struct ExerciseCardRender: View {
                         onChangeReps: { onReps(s, $0) },
                         onNextSetLogged: { onStartRest(s.id) }
                     )
-                    if let end = restEndAt, end > Date(), isNextAnchor(s.id) {
-                        RestBar(endAt: end, total: total) { onCompleteRest() }
-                            .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
                 }
             }
 
@@ -1154,6 +1244,59 @@ extension InWorkoutView {
 
     private func endEditing() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
+// MARK: - Rest Duration Picker (wheel style)
+private struct RestDurationPicker: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var minutes: Int
+    @State private var seconds: Int
+    let onSave: (Int) -> Void
+    let onCancel: () -> Void
+
+    init(totalSeconds: Int, onSave: @escaping (Int) -> Void, onCancel: @escaping () -> Void) {
+        let m = max(0, totalSeconds) / 60
+        let s = max(0, totalSeconds) % 60
+        _minutes = State(initialValue: m)
+        _seconds = State(initialValue: s)
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 16) {
+                HStack(spacing: 24) {
+                    Picker("Minutes", selection: $minutes) {
+                        ForEach(0..<11, id: \.self) { Text("\($0) m") }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(maxWidth: .infinity)
+                    Picker("Seconds", selection: $seconds) {
+                        ForEach(0..<60, id: \.self) { Text(String(format: "%02d s", $0)) }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(maxWidth: .infinity)
+                }
+                .frame(height: 180)
+                Spacer()
+            }
+            .navigationTitle("Rest Timer")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel(); dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let total = minutes * 60 + seconds
+                        onSave(total)
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
