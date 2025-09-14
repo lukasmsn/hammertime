@@ -17,16 +17,63 @@ struct InWorkoutView: View {
     @State private var restDurationSeconds: Int = 90
     @State private var restAnchorSetId: UUID? = nil
     @State private var swipeDirection: Int = 0 // -1 prev, +1 next
+    @State private var dragOffsetX: CGFloat = 0
+    @State private var isDragging: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
             progressBar
-            // Animated exercise card swap
-            currentExerciseSection
-                .id(currentExerciseIndex)
-                .transition(cardTransition)
-                .animation(.easeOut(duration: 0.22), value: currentExerciseIndex)
+            // Interactive swipe-driven card swap
+            GeometryReader { geo in
+                // Horizontal pager – cards are full-width pages that track the finger, no extra spacing
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(sortedExercises.enumerated()), id: \.0) { idx, _ in
+                        cardSection(for: idx)
+                            .frame(width: geo.size.width, alignment: .top)
+                    }
+                }
+                .offset(x: -CGFloat(currentExerciseIndex) * geo.size.width + dragOffsetX)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 5).onChanged { value in
+                    isDragging = true
+                    let tx = value.translation.width
+                    // Rubber-band at edges
+                    if (currentExerciseIndex == 0 && tx > 0) || (currentExerciseIndex == sortedExercises.count - 1 && tx < 0) {
+                        dragOffsetX = tx / 6
+                    } else {
+                        dragOffsetX = tx
+                    }
+                }.onEnded { value in
+                    let tx = value.translation.width
+                    let threshold = geo.size.width * 0.25
+                    if tx < -threshold && currentExerciseIndex < sortedExercises.count - 1 {
+                        swipeDirection = 1
+                        // Animate container to next page without changing index yet
+                        withAnimation(.interpolatingSpring(stiffness: 260, damping: 28)) {
+                            dragOffsetX = -geo.size.width
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                            let gen = UISelectionFeedbackGenerator(); gen.selectionChanged()
+                            currentExerciseIndex += 1
+                            dragOffsetX = 0
+                        }
+                    } else if tx > threshold && currentExerciseIndex > 0 {
+                        swipeDirection = -1
+                        withAnimation(.interpolatingSpring(stiffness: 260, damping: 28)) {
+                            dragOffsetX = geo.size.width
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                            let gen = UISelectionFeedbackGenerator(); gen.selectionChanged()
+                            currentExerciseIndex -= 1
+                            dragOffsetX = 0
+                        }
+                    } else {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffsetX = 0 }
+                    }
+                    isDragging = false
+                })
+            }
             // Fade nav row on change
             navRow
                 .id(currentExerciseIndex)
@@ -41,15 +88,7 @@ struct InWorkoutView: View {
         .background(BackSwipeDisabledView(disable: true))
         .onAppear { syncCurrentExerciseIndex() }
         .contentShape(Rectangle())
-        .gesture(DragGesture(minimumDistance: 20, coordinateSpace: .local).onEnded { value in
-            if value.translation.width < -40 {
-                swipeDirection = 1
-                withAnimation(.easeOut(duration: 0.22)) { goNext() }
-            } else if value.translation.width > 40 {
-                swipeDirection = -1
-                withAnimation(.easeOut(duration: 0.22)) { goPrev() }
-            }
-        })
+        // Outer drag reserved for swipe-down to dismiss keyboard; horizontal handled above
         .simultaneousGesture(DragGesture(minimumDistance: 20, coordinateSpace: .local).onEnded { value in
             if value.translation.height > 40 { endEditing() }
         })
@@ -63,6 +102,23 @@ struct InWorkoutView: View {
 
 // MARK: - Header
 extension InWorkoutView {
+    private func cardSection(for index: Int) -> some View { cardContent(for: index, isActive: index == currentExerciseIndex) }
+    private func cardContent(for index: Int, isActive: Bool) -> some View {
+        let ex = index >= 0 && index < sortedExercises.count ? sortedExercises[index] : nil
+        return ExerciseCardRender(exercise: ex,
+                                  isActive: isActive,
+                                  isNextAnchor: { id in restAnchorSetId == id },
+                                  restEndAt: restEndAt,
+                                  total: restDurationSeconds,
+                                  onDelete: { deleteSet($0) },
+                                  canToggle: { canToggle($0, in: ex?.sets.sorted { $0.setNumber < $1.setNumber } ?? []) },
+                                  onToggle: { toggleLogged($0) },
+                                  onWeight: { set, lb in updateWeight(set: set, pounds: lb) },
+                                  onReps: { set, reps in updateReps(set: set, reps: reps) },
+                                  onStartRest: { id in startRest(anchorSetId: id) },
+                                  onCompleteRest: { restEndAt = nil; restAnchorSetId = nil },
+                                  onAddSet: { if isActive { addSetToCurrentExercise() } })
+    }
     private var cardTransition: AnyTransition {
         // Move out based on swipe direction and bring new one from opposite edge
         if swipeDirection > 0 {
@@ -350,19 +406,20 @@ extension InWorkoutView {
                     Text("Set")
                 }
                 .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(.black)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
                         .fill(Color.black.opacity(0.02))
                 )
+                .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
             }
             .buttonStyle(.plain)
             .padding(.top, 8)
             // Follows parent animation driven by withAnimation in add/delete
         }
-        .padding(16)
+        .padding(0)
         .background(
             ZStack {
                 // base
@@ -388,9 +445,7 @@ extension InWorkoutView {
             .shadow(color: .black.opacity(0.03), radius: 28, x: 0, y: 28)
             .shadow(color: .black.opacity(0.04), radius: 15, x: 0, y: 7)
         )
-        .padding(.horizontal, 24)
-        .padding(.top, 16)
-        .padding(.bottom, 24)
+        
         .allowsHitTesting(true)
         .zIndex(1)
         .animation(.easeOut(duration: 0.08), value: exercise(at: currentExerciseIndex)?.sets.count ?? 0)
@@ -558,6 +613,87 @@ private struct RestBar: View {
     }
 }
 
+// MARK: - Readonly Card for Peek
+private struct ExerciseCardRender: View {
+    let exercise: Exercise?
+    let isActive: Bool
+    let isNextAnchor: (UUID) -> Bool
+    let restEndAt: Date?
+    let total: Int
+    let onDelete: (SetEntry) -> Void
+    let canToggle: (SetEntry) -> Bool
+    let onToggle: (SetEntry) -> Void
+    let onWeight: (SetEntry, Int?) -> Void
+    let onReps: (SetEntry, Int?) -> Void
+    let onStartRest: (UUID) -> Void
+    let onCompleteRest: () -> Void
+    let onAddSet: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(exercise?.name ?? "")
+                .font(.system(size: 22, weight: .medium))
+
+            HStack {
+                Text("").frame(width: 24)
+                Spacer()
+                Text("lbs").foregroundStyle(.secondary).frame(width: 80)
+                Text("reps").foregroundStyle(.secondary).frame(width: 80)
+                Spacer().frame(width: 36)
+            }
+            .font(.system(size: 16, weight: .medium))
+
+            VStack(spacing: 8) {
+                let sets = (exercise?.sets.sorted { $0.setNumber < $1.setNumber } ?? [])
+                ForEach(sets) { s in
+                    ExerciseSetRowView(
+                        set: s,
+                        isNext: s.id == sets.first(where: { !$0.isLogged })?.id,
+                        onDelete: { onDelete(s) },
+                        onToggleLogged: { if canToggle(s) { onToggle(s) } },
+                        onChangeWeightLb: { onWeight(s, $0) },
+                        onChangeReps: { onReps(s, $0) },
+                        onNextSetLogged: { onStartRest(s.id) }
+                    )
+                    if let end = restEndAt, end > Date(), isNextAnchor(s.id) {
+                        RestBar(endAt: end, total: total) { onCompleteRest() }
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+            }
+
+            // Always render +Set to keep heights consistent across pages
+            Button(action: { onAddSet() }) {
+                HStack(spacing: 6) { Image(systemName: "plus"); Text("Set") }
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.black.opacity(0.02)))
+                    .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
+            }
+            .allowsHitTesting(isActive)
+        }
+        .padding(16)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white)
+                RoundedRectangle(cornerRadius: 24, style: .continuous).fill(RadialGradient(colors: [Color.brandYellow.opacity(0.05), Color.brandYellow.opacity(0.01)], center: .topTrailing, startRadius: 0, endRadius: 320))
+                RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.black.opacity(0.05), lineWidth: 1)
+            }
+            .compositingGroup()
+            .shadow(color: .black.opacity(0.0), radius: 49, x: 0, y: 173)
+            .shadow(color: .black.opacity(0.01), radius: 44, x: 0, y: 111)
+            .shadow(color: .black.opacity(0.02), radius: 37, x: 0, y: 62)
+            .shadow(color: .black.opacity(0.03), radius: 28, x: 0, y: 28)
+            .shadow(color: .black.opacity(0.04), radius: 15, x: 0, y: 7)
+        )
+        .padding(.horizontal, 12)
+        .padding(.top, 16)
+        .padding(.bottom, 16)
+    }
+}
+
 // MARK: - Log Button Builder
 private extension ExerciseSetRowView {
     @ViewBuilder
@@ -612,7 +748,7 @@ private struct SwipeToDeleteModifier: ViewModifier {
                 .background(Color.clear)
                 .offset(x: offsetX)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        // Do not clip the row; allow shadows from siblings (e.g., +Set) to overflow
         .gesture(DragGesture(minimumDistance: 25).onChanged { value in
             offsetX = min(0, value.translation.width)
             showRed = value.translation.width < -10
