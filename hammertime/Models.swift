@@ -87,12 +87,14 @@ final class Message {
     var role: String
     var content: String
     var createdAt: Date
+    var workout: Workout?
 
-    init(id: UUID = UUID(), role: String, content: String, createdAt: Date = .now) {
+    init(id: UUID = UUID(), role: String, content: String, createdAt: Date = .now, workout: Workout? = nil) {
         self.id = id
         self.role = role
         self.content = content
         self.createdAt = createdAt
+        self.workout = workout
     }
 }
 

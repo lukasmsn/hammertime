@@ -12,73 +12,25 @@ struct InWorkoutView: View {
     @Environment(\.dismiss) private var dismiss
     @State var workout: Workout
     @State private var currentExerciseIndex: Int = 0
-    @State private var showChat = false
+    @State private var isChatOpen = false
+    @FocusState private var isComposerFocused: Bool
+    @State private var chatInputText: String = ""
+    @State private var isSendingChat = false
+    @State private var chatErrorText: String?
     @State private var restEndAt: Date? = nil
     @State private var restDurationSeconds: Int = 90
     @State private var restAnchorSetId: UUID? = nil
     @State private var swipeDirection: Int = 0 // -1 prev, +1 next
     @State private var dragOffsetX: CGFloat = 0
     @State private var isDragging: Bool = false
+    @State private var isChatTab: Bool = true
+    @State private var isKeyboardExpanded: Bool = false
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            // Replace progress bar with nav row
-            navRow
-                .id(currentExerciseIndex)
-                .transition(.opacity)
-                .animation(.easeOut(duration: 0.18), value: currentExerciseIndex)
-            // Interactive swipe-driven card swap
-            GeometryReader { geo in
-                // Horizontal pager – cards are full-width pages that track the finger, no extra spacing
-                HStack(alignment: .top, spacing: 0) {
-                    ForEach(Array(sortedExercises.enumerated()), id: \.0) { idx, _ in
-                        cardSection(for: idx)
-                            .frame(width: geo.size.width, alignment: .top)
-                    }
-                }
-                .offset(x: -CGFloat(currentExerciseIndex) * geo.size.width + dragOffsetX)
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 5).onChanged { value in
-                    isDragging = true
-                    let tx = value.translation.width
-                    // Rubber-band at edges
-                    if (currentExerciseIndex == 0 && tx > 0) || (currentExerciseIndex == sortedExercises.count - 1 && tx < 0) {
-                        dragOffsetX = tx / 6
-                    } else {
-                        dragOffsetX = tx
-                    }
-                }.onEnded { value in
-                    let tx = value.translation.width
-                    let threshold = geo.size.width * 0.25
-                    if tx < -threshold && currentExerciseIndex < sortedExercises.count - 1 {
-                        swipeDirection = 1
-                        // Animate container to next page without changing index yet
-                        withAnimation(.interpolatingSpring(stiffness: 260, damping: 28)) {
-                            dragOffsetX = -geo.size.width
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                            let gen = UISelectionFeedbackGenerator(); gen.selectionChanged()
-                            currentExerciseIndex += 1
-                            dragOffsetX = 0
-                        }
-                    } else if tx > threshold && currentExerciseIndex > 0 {
-                        swipeDirection = -1
-                        withAnimation(.interpolatingSpring(stiffness: 260, damping: 28)) {
-                            dragOffsetX = geo.size.width
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                            let gen = UISelectionFeedbackGenerator(); gen.selectionChanged()
-                            currentExerciseIndex -= 1
-                            dragOffsetX = 0
-                        }
-                    } else {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffsetX = 0 }
-                    }
-                    isDragging = false
-                })
-            }
-            // Nav row already shown above
+            topHeaderSection
+            navRowSection
+            contentSection
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -87,16 +39,147 @@ struct InWorkoutView: View {
         .navigationTitle("")
         .background(BackSwipeDisabledView(disable: true))
         .onAppear { syncCurrentExerciseIndex() }
+        .onChange(of: isComposerFocused) { _, newVal in
+            isKeyboardExpanded = newVal
+            if newVal == false { withAnimation(.easeInOut(duration: 0.2)) { isChatOpen = false } }
+        }
         .contentShape(Rectangle())
-        // Outer drag reserved for swipe-down to dismiss keyboard; horizontal handled above
         .simultaneousGesture(DragGesture(minimumDistance: 20, coordinateSpace: .local).onEnded { value in
             if value.translation.height > 40 { endEditing() }
         })
-        .safeAreaInset(edge: .bottom) { bottomBar }
-        .background(
-            NavigationLink(isActive: $showChat) { ChatView() } label: { EmptyView() }
-        )
+        .safeAreaInset(edge: .bottom) { bottomInsetSection }
+        .alert("Error", isPresented: Binding(get: { chatErrorText != nil }, set: { _ in chatErrorText = nil })) {
+            Button("OK", role: .cancel) { }
+        } message: { Text(chatErrorText ?? "") }
         .toolbar(.hidden, for: .tabBar)
+    }
+
+    private var topHeaderSection: some View {
+        Group { if !isKeyboardExpanded { header } }
+    }
+
+    private var navRowSection: some View {
+        Group {
+            if !isKeyboardExpanded {
+                navRow
+                    .id(currentExerciseIndex)
+                    .transition(.opacity)
+                    .animation(.easeOut(duration: 0.18), value: currentExerciseIndex)
+            }
+        }
+    }
+
+    private var contentSection: some View {
+        Group {
+            if isChatOpen {
+                if isKeyboardExpanded {
+                    collapsedChatSection.eraseToAnyView()
+                } else {
+                    pagerWithBelowContentSection.eraseToAnyView()
+                }
+            } else {
+                pagerSection.eraseToAnyView()
+            }
+        }
+    }
+
+    private var collapsedChatSection: some View {
+        VStack(spacing: 8) {
+            collapsedCardSection
+            Group {
+                if isChatTab {
+                    WorkoutChatThread(workoutId: workout.id)
+                } else {
+                    NotesPlaceholder()
+                }
+            }
+            .onTapGesture { }
+            .gesture(DragGesture(minimumDistance: 20).onEnded { value in
+                if value.translation.height > 40 { endEditing() }
+            })
+        }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var collapsedCardSection: some View {
+        ExerciseCardRender(
+            exercise: exercise(at: currentExerciseIndex),
+            isActive: true,
+            isNextAnchor: { id in restAnchorSetId == id },
+            restEndAt: restEndAt,
+            total: restDurationSeconds,
+            onDelete: { deleteSet($0) },
+            canToggle: { s in canToggle(s, in: exercise(at: currentExerciseIndex)?.sets.sorted { $0.setNumber < $1.setNumber } ?? []) },
+            onToggle: { toggleLogged($0) },
+            onWeight: { set, lb in updateWeight(set: set, pounds: lb) },
+            onReps: { set, reps in updateReps(set: set, reps: reps) },
+            onStartRest: { id in startRest(anchorSetId: id) },
+            onCompleteRest: { withAnimation(.easeOut(duration: 0.2)) { restEndAt = nil; restAnchorSetId = nil } },
+            onAddSet: { },
+            visibleSetId: nextSetId(in: exercise(at: currentExerciseIndex)?.sets.sorted { $0.setNumber < $1.setNumber } ?? []),
+            showAddSetButton: false
+        )
+    }
+
+    private var pagerSection: some View {
+        GeometryReader { geo in
+            HStack(alignment: .top, spacing: 0) {
+                ForEach(Array(sortedExercises.enumerated()), id: \.0) { idx, _ in
+                    cardSection(for: idx)
+                        .frame(width: geo.size.width, alignment: .top)
+                }
+            }
+            .offset(x: -CGFloat(currentExerciseIndex) * geo.size.width + dragOffsetX)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 5).onChanged { value in
+                isDragging = true
+                let tx = value.translation.width
+                if (currentExerciseIndex == 0 && tx > 0) || (currentExerciseIndex == sortedExercises.count - 1 && tx < 0) {
+                    dragOffsetX = tx / 6
+                } else {
+                    dragOffsetX = tx
+                }
+            }.onEnded { value in
+                let tx = value.translation.width
+                let threshold = geo.size.width * 0.25
+                if tx < -threshold && currentExerciseIndex < sortedExercises.count - 1 {
+                    swipeDirection = 1
+                    withAnimation(.interpolatingSpring(stiffness: 260, damping: 28)) { dragOffsetX = -geo.size.width }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                        let gen = UISelectionFeedbackGenerator(); gen.selectionChanged()
+                        currentExerciseIndex += 1
+                        dragOffsetX = 0
+                    }
+                } else if tx > threshold && currentExerciseIndex > 0 {
+                    swipeDirection = -1
+                    withAnimation(.interpolatingSpring(stiffness: 260, damping: 28)) { dragOffsetX = geo.size.width }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                        let gen = UISelectionFeedbackGenerator(); gen.selectionChanged()
+                        currentExerciseIndex -= 1
+                        dragOffsetX = 0
+                    }
+                } else {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { dragOffsetX = 0 }
+                }
+                isDragging = false
+            })
+        }
+    }
+
+    private var pagerWithBelowContentSection: some View {
+        VStack(spacing: 8) {
+            pagerSection
+                .frame(maxHeight: .infinity)
+            Group {
+                if isChatTab { WorkoutChatThread(workoutId: workout.id) }
+                else { NotesPlaceholder() }
+            }
+            .frame(minHeight: 180)
+        }
+    }
+
+    private var bottomInsetSection: some View {
+        Group { (isChatOpen && isChatTab) ? AnyView(chatComposerWithMode) : AnyView(bottomBarWithNotes) }
     }
 }
 
@@ -117,7 +200,10 @@ extension InWorkoutView {
                                   onReps: { set, reps in updateReps(set: set, reps: reps) },
                                   onStartRest: { id in startRest(anchorSetId: id) },
                                   onCompleteRest: { restEndAt = nil; restAnchorSetId = nil },
-                                  onAddSet: { if isActive { addSetToCurrentExercise() } })
+                                  onAddSet: { if isActive { addSetToCurrentExercise() } },
+                                  visibleSetId: nil,
+                                  showAddSetButton: true)
+        .onTapGesture { if isChatOpen { closeChat() } }
     }
     private var cardTransition: AnyTransition {
         // Move out based on swipe direction and bring new one from opposite edge
@@ -169,6 +255,15 @@ extension InWorkoutView {
         restDurationSeconds = 90
         restAnchorSetId = anchorSetId
         restEndAt = Date().addingTimeInterval(TimeInterval(restDurationSeconds))
+    }
+    private func openChat() {
+        withAnimation(.easeInOut(duration: 0.22)) { isChatOpen = true }
+        isChatTab = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { isComposerFocused = true }
+    }
+    private func closeChat() {
+        endEditing()
+        withAnimation(.easeInOut(duration: 0.22)) { isChatOpen = false }
     }
     private var header: some View {
         ZStack {
@@ -306,11 +401,11 @@ extension InWorkoutView {
 
 // MARK: - Talk to Coach Bar
 extension InWorkoutView {
-    private var bottomBar: some View {
+    private var bottomBarWithNotes: some View {
         HStack(spacing: 12) {
             // Talk to your coach
             if isAllSetsCompleted {
-                Button(action: { showChat = true }) {
+                Button(action: { openChat() }) {
                     Image(systemName: "message.fill")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(Color(UIColor.systemGray))
@@ -322,15 +417,12 @@ extension InWorkoutView {
                 }
                 .buttonStyle(.plain)
             } else {
-                Button(action: { showChat = true }) {
+                Button(action: { openChat() }) {
                     HStack {
                         Text("Talk to your coach")
                             .font(.system(size: 18))
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 20)
                     .frame(height: 50)
@@ -349,6 +441,18 @@ extension InWorkoutView {
                 }
                 .buttonStyle(.plain)
             }
+
+            // Notes button on the right
+            Button(action: { withAnimation(.easeInOut(duration: 0.2)) { isChatOpen = true; isChatTab = false; endEditing() } }) {
+                Image(systemName: "note.text")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .frame(width: 48, height: 48)
+                    .background(Circle().fill(Color.white))
+                    .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
+                    .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 6)
+            }
+            .buttonStyle(.plain)
 
             // Finish primary (only when all sets completed)
             if isAllSetsCompleted {
@@ -371,6 +475,113 @@ extension InWorkoutView {
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+    }
+}
+
+// MARK: - Chat Composer (inline)
+extension InWorkoutView {
+    private var chatComposerWithMode: some View {
+        HStack(alignment: .center, spacing: 8) {
+            // Background styled like the Talk to your coach bar
+            HStack(spacing: 12) {
+                TextField("Talk to your coach", text: $chatInputText, axis: .vertical)
+                    .lineLimit(1...4)
+                    .font(.system(size: 18))
+                    .disabled(isSendingChat)
+                    .focused($isComposerFocused)
+                    .onSubmit { sendChat() }
+                    .padding(.vertical, 12)
+            }
+            .padding(.horizontal, 20)
+            .frame(height: 48)
+            .frame(maxWidth: .infinity)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white)
+                    RoundedRectangle(cornerRadius: 24, style: .continuous).fill(RadialGradient(colors: [Color.brandYellow.opacity(0.05), Color.brandYellow.opacity(0.01)], center: .topTrailing, startRadius: 0, endRadius: 220))
+                    RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.black.opacity(0.05), lineWidth: 1)
+                }
+                .shadow(color: .black.opacity(0.01), radius: 71, x: 0, y: 252)
+                .shadow(color: .black.opacity(0.01), radius: 44, x: 0, y: 111)
+                .shadow(color: .black.opacity(0.02), radius: 37, x: 0, y: 62)
+                .shadow(color: .black.opacity(0.03), radius: 28, x: 0, y: 28)
+                .shadow(color: .black.opacity(0.04), radius: 15, x: 0, y: 7)
+            )
+            // Detached floating send button
+            Button(action: sendChat) {
+                ZStack {
+                    Circle()
+                        .fill(Color.brandYellow)
+                        .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
+                        .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 6)
+                    if isSendingChat { ProgressView().progressViewStyle(.circular) }
+                    else { Image(systemName: "arrow.up").font(.system(size: 18, weight: .bold)).foregroundStyle(.black) }
+                }
+                .frame(width: 48, height: 48)
+            }
+            .disabled(chatInputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSendingChat)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+    }
+
+    private func sendChat() {
+        let trimmed = chatInputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isSendingChat else { return }
+        isSendingChat = true
+        chatInputText = ""
+
+        let userMsg = Message(role: "user", content: trimmed, createdAt: .now, workout: workout)
+        context.insert(userMsg)
+        try? context.save()
+
+        Task {
+            do {
+                let metrics = try ChatContextBuilder.buildMetricsContext(modelContext: context)
+                let current = exercise(at: currentExerciseIndex)
+                let nextId = nextSetId(in: current?.sets.sorted { $0.setNumber < $1.setNumber } ?? [])
+                let state = ChatContextBuilder.buildCurrentStateContext(workout: workout, currentExercise: current, restEndAt: restEndAt, restTotalSeconds: restDurationSeconds, nextSetId: nextId)
+                var contextLines = metrics
+                contextLines.append("CURRENT_STATE_JSON:\n" + state)
+
+                // Fetch last messages for this workout only
+                let wid: UUID? = workout.id
+                var fd = FetchDescriptor<Message>(
+                    predicate: #Predicate<Message> { $0.workout?.id == wid },
+                    sortBy: [SortDescriptor(\Message.createdAt, order: .forward)]
+                )
+                fd.fetchLimit = 20
+                let historyMsgs = try context.fetch(fd)
+                let historyPairs: [(role: String, content: String)] = historyMsgs.map { ($0.role, $0.content) } + [("user", trimmed)]
+
+                let reply = try await OpenAIService.shared.replyWithHistory(contextLines: contextLines, history: historyPairs)
+                let assistant = Message(role: "assistant", content: reply, workout: workout)
+                context.insert(assistant)
+                try? context.save()
+            } catch {
+                chatErrorText = userFriendly(error)
+            }
+            isSendingChat = false
+        }
+    }
+}
+
+// MARK: - Error Mapping
+extension InWorkoutView {
+    private func userFriendly(_ error: Error) -> String {
+        if let err = error as? OpenAIError {
+            switch err {
+            case .missingApiKey:
+                return "Missing OpenAI API key. Set OPENAI_API_KEY in Secrets.xcconfig and ensure the target's Base Configuration points to it."
+            case .http(let status, let body):
+                return "OpenAI HTTP error \(status). \(body ?? "")"
+            case .decoding:
+                return "OpenAI response could not be parsed. Try again."
+            case .network(let underlying):
+                return "Network error: \(underlying.localizedDescription)"
+            }
+        }
+        return error.localizedDescription
     }
 }
 
@@ -647,27 +858,36 @@ private struct ExerciseCardRender: View {
     let onStartRest: (UUID) -> Void
     let onCompleteRest: () -> Void
     let onAddSet: () -> Void
+    let visibleSetId: UUID?
+    let showAddSetButton: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // Compute filtered set list outside of the ViewBuilder to avoid buildExpression errors
+        let setsAll: [SetEntry] = (exercise?.sets.sorted { $0.setNumber < $1.setNumber } ?? [])
+        let sets: [SetEntry] = {
+            if let visibleSetId, let only = setsAll.first(where: { $0.id == visibleSetId }) { return [only] }
+            return setsAll
+        }()
+
+        return VStack(alignment: .leading, spacing: 8) {
             Text(exercise?.name ?? "")
                 .font(.system(size: 22, weight: .medium))
-
-            HStack {
-                Text("").frame(width: 24)
-                Spacer()
-                Text("lbs").foregroundStyle(.secondary).frame(width: 80)
-                Text("reps").foregroundStyle(.secondary).frame(width: 80)
-                Spacer().frame(width: 36)
+            if visibleSetId == nil { // show lbs/reps header only in full mode
+                HStack {
+                    Text("").frame(width: 24)
+                    Spacer()
+                    Text("lbs").foregroundStyle(.secondary).frame(width: 80)
+                    Text("reps").foregroundStyle(.secondary).frame(width: 80)
+                    Spacer().frame(width: 36)
+                }
+                .font(.system(size: 16, weight: .medium))
             }
-            .font(.system(size: 16, weight: .medium))
 
             VStack(spacing: 8) {
-                let sets = (exercise?.sets.sorted { $0.setNumber < $1.setNumber } ?? [])
                 ForEach(sets) { s in
                     ExerciseSetRowView(
                         set: s,
-                        isNext: s.id == sets.first(where: { !$0.isLogged })?.id,
+                        isNext: s.id == setsAll.first(where: { !$0.isLogged })?.id,
                         onDelete: { onDelete(s) },
                         onToggleLogged: { if canToggle(s) { onToggle(s) } },
                         onChangeWeightLb: { onWeight(s, $0) },
@@ -682,16 +902,18 @@ private struct ExerciseCardRender: View {
             }
 
             // Always render +Set to keep heights consistent across pages
-            Button(action: { onAddSet() }) {
-                HStack(spacing: 6) { Image(systemName: "plus"); Text("Set") }
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.black)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.black.opacity(0.02)))
-                    .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
+            if showAddSetButton {
+                Button(action: { onAddSet() }) {
+                    HStack(spacing: 6) { Image(systemName: "plus"); Text("Set") }
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.black.opacity(0.02)))
+                        .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
+                }
+                .allowsHitTesting(isActive)
             }
-            .allowsHitTesting(isActive)
         }
         .padding(16)
         .background(
@@ -713,6 +935,24 @@ private struct ExerciseCardRender: View {
     }
 }
 
+// MARK: - Notes Placeholder
+private struct NotesPlaceholder: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "note.text")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text("Previous workouts & notes will appear here")
+                .font(.system(size: 16))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.top, 12)
+        .background(Color.clear)
+    }
+}
+
+
 // MARK: - Log Button Builder
 private extension ExerciseSetRowView {
     @ViewBuilder
@@ -721,7 +961,6 @@ private extension ExerciseSetRowView {
             Circle()
                 .fill(Color.black.opacity(0.02))
                 .overlay(Image(systemName: "checkmark").font(.system(size: 18, weight: .semibold)).foregroundStyle(.black))
-                .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
                 .onTapGesture {
                     onToggleLogged()
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -741,7 +980,6 @@ private extension ExerciseSetRowView {
         } else {
             Circle()
                 .fill(Color.black.opacity(0.02))
-                .overlay(Circle().stroke(Color.black.opacity(0.05), lineWidth: 1))
         }
     }
 }
