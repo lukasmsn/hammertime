@@ -16,13 +16,22 @@ struct InWorkoutView: View {
     @State private var restEndAt: Date? = nil
     @State private var restDurationSeconds: Int = 90
     @State private var restAnchorSetId: UUID? = nil
+    @State private var swipeDirection: Int = 0 // -1 prev, +1 next
 
     var body: some View {
         VStack(spacing: 0) {
             header
             progressBar
+            // Animated exercise card swap
             currentExerciseSection
+                .id(currentExerciseIndex)
+                .transition(cardTransition)
+                .animation(.easeOut(duration: 0.22), value: currentExerciseIndex)
+            // Fade nav row on change
             navRow
+                .id(currentExerciseIndex)
+                .transition(.opacity)
+                .animation(.easeOut(duration: 0.18), value: currentExerciseIndex)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -33,8 +42,13 @@ struct InWorkoutView: View {
         .onAppear { syncCurrentExerciseIndex() }
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 20, coordinateSpace: .local).onEnded { value in
-            if value.translation.width < -40 { goNext() }
-            else if value.translation.width > 40 { goPrev() }
+            if value.translation.width < -40 {
+                swipeDirection = 1
+                withAnimation(.easeOut(duration: 0.22)) { goNext() }
+            } else if value.translation.width > 40 {
+                swipeDirection = -1
+                withAnimation(.easeOut(duration: 0.22)) { goPrev() }
+            }
         })
         .simultaneousGesture(DragGesture(minimumDistance: 20, coordinateSpace: .local).onEnded { value in
             if value.translation.height > 40 { endEditing() }
@@ -49,6 +63,18 @@ struct InWorkoutView: View {
 
 // MARK: - Header
 extension InWorkoutView {
+    private var cardTransition: AnyTransition {
+        // Move out based on swipe direction and bring new one from opposite edge
+        if swipeDirection > 0 {
+            return .asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                               removal: .move(edge: .leading).combined(with: .opacity))
+        } else if swipeDirection < 0 {
+            return .asymmetric(insertion: .move(edge: .leading).combined(with: .opacity),
+                               removal: .move(edge: .trailing).combined(with: .opacity))
+        } else {
+            return .opacity
+        }
+    }
     private var currentExerciseSection: some View { exerciseCard }
     private func nextSetId(in sets: [SetEntry]) -> UUID? {
         // Always highlight first unchecked set
