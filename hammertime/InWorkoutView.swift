@@ -115,7 +115,8 @@ struct InWorkoutView: View {
             onReps: { set, reps in updateReps(set: set, reps: reps) },
             onStartRest: { id in startRest(anchorSetId: id) },
             onCompleteRest: { withAnimation(.easeOut(duration: 0.2)) { restEndAt = nil; restAnchorSetId = nil } },
-            onAddSet: { },
+            onAddSet: { addSetToCurrentExercise() },
+            onRemoveSet: { removeLastSetFromCurrentExercise() },
             visibleSetId: nextSetId(in: exercise(at: currentExerciseIndex)?.sets.sorted { $0.setNumber < $1.setNumber } ?? []),
             showAddSetButton: false
         )
@@ -201,6 +202,7 @@ extension InWorkoutView {
                                   onStartRest: { id in startRest(anchorSetId: id) },
                                   onCompleteRest: { restEndAt = nil; restAnchorSetId = nil },
                                   onAddSet: { if isActive { addSetToCurrentExercise() } },
+                                  onRemoveSet: { if isActive { removeLastSetFromCurrentExercise() } },
                                   visibleSetId: nil,
                                   showAddSetButton: true)
         .onTapGesture { if isChatOpen { closeChat() } }
@@ -394,7 +396,7 @@ extension InWorkoutView {
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
     }
 }
@@ -593,6 +595,31 @@ extension InWorkoutView {
             Text(ex?.name ?? "")
                 .font(.system(size: 22, weight: .medium))
 
+            // Sets count control row
+            let setsCount = ex?.sets.count ?? 0
+            Menu {
+                Button(role: .none) { addSetToCurrentExercise() } label: {
+                    Label("Increase", systemImage: "plus")
+                }
+                Button(role: .none) { removeLastSetFromCurrentExercise() } label: {
+                    Label("Decrease", systemImage: "minus")
+                }
+                .disabled(setsCount == 0)
+            } label: {
+                HStack(spacing: 6) {
+                    Text("\(setsCount) Sets")
+                }
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(Color.black.opacity(0.02))
+                )
+                .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
+            }
+
             // header row: lbs / reps
             HStack {
                 Text("")
@@ -628,26 +655,7 @@ extension InWorkoutView {
                     }
                 }
             }
-            // No explicit transition; rely on withAnimation in add/delete to keep button and rows in sync
-
-            Button(action: { withAnimation(.easeOut(duration: 0.08)) { addSetToCurrentExercise() } }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus")
-                    Text("Set")
-                }
-                .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(.black)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(Color.black.opacity(0.02))
-                )
-                .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 8)
-            // Follows parent animation driven by withAnimation in add/delete
+            // No explicit transition; rely on withAnimation in add/delete to keep rows in sync
         }
         .padding(0)
         .background(
@@ -721,7 +729,7 @@ private struct ExerciseSetRowView: View {
             .frame(width: 48, height: 48, alignment: .center)
         }
         .contentShape(Rectangle())
-        .modifier(SwipeToDeleteModifier(onDelete: onDelete))
+        // .modifier(SwipeToDeleteModifier(onDelete: onDelete))
         .onAppear { syncTextFromModel() }
         .onChange(of: set.weightKg) { _, _ in syncTextFromModel() }
         .onChange(of: set.reps) { _, _ in syncTextFromModel() }
@@ -858,6 +866,7 @@ private struct ExerciseCardRender: View {
     let onStartRest: (UUID) -> Void
     let onCompleteRest: () -> Void
     let onAddSet: () -> Void
+    let onRemoveSet: () -> Void
     let visibleSetId: UUID?
     let showAddSetButton: Bool
 
@@ -872,6 +881,28 @@ private struct ExerciseCardRender: View {
         return VStack(alignment: .leading, spacing: 8) {
             Text(exercise?.name ?? "")
                 .font(.system(size: 22, weight: .medium))
+
+            // Sets count control row
+            let setsCount = exercise?.sets.count ?? 0
+            Menu {
+                Button(role: .none) { onAddSet() } label: {
+                    Label("Increase", systemImage: "plus")
+                }
+                Button(role: .none) { onRemoveSet() } label: {
+                    Label("Decrease", systemImage: "minus")
+                }
+                .disabled(setsCount == 0)
+            } label: {
+                HStack(spacing: 6) {
+                    Text("\(setsCount) Sets")
+                }
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.black.opacity(0.02)))
+                .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
+            }
             if visibleSetId == nil { // show lbs/reps header only in full mode
                 HStack {
                     Text("").frame(width: 24)
@@ -901,19 +932,8 @@ private struct ExerciseCardRender: View {
                 }
             }
 
-            // Always render +Set to keep heights consistent across pages
-            if showAddSetButton {
-                Button(action: { onAddSet() }) {
-                    HStack(spacing: 6) { Image(systemName: "plus"); Text("Set") }
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.black.opacity(0.02)))
-                        .shadow(color: .black.opacity(0.03), radius: 8, x: 0, y: 4)
-                }
-                .allowsHitTesting(isActive)
-            }
+            // Keep parameter to avoid API churn; no bottom button anymore
+            if showAddSetButton { EmptyView().hidden() }
         }
         .padding(16)
         .background(
@@ -1113,6 +1133,18 @@ extension InWorkoutView {
         }
         context.insert(s)
         try? context.save()
+    }
+
+    private func removeLastSetFromCurrentExercise() {
+        guard let ex = exercise(at: currentExerciseIndex) else { return }
+        guard let last = ex.sets.max(by: { $0.setNumber < $1.setNumber }) else { return }
+        withAnimation(.easeOut(duration: 0.08)) {
+            if let idx = ex.sets.firstIndex(where: { $0.id == last.id }) {
+                ex.sets.remove(at: idx)
+            }
+            context.delete(last)
+            try? context.save()
+        }
     }
 
     private func lbToKg(_ lb: Double?) -> Double? {
