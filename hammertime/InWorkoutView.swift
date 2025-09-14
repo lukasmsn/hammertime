@@ -23,7 +23,11 @@ struct InWorkoutView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            progressBar
+            // Replace progress bar with nav row
+            navRow
+                .id(currentExerciseIndex)
+                .transition(.opacity)
+                .animation(.easeOut(duration: 0.18), value: currentExerciseIndex)
             // Interactive swipe-driven card swap
             GeometryReader { geo in
                 // Horizontal pager – cards are full-width pages that track the finger, no extra spacing
@@ -74,11 +78,7 @@ struct InWorkoutView: View {
                     isDragging = false
                 })
             }
-            // Fade nav row on change
-            navRow
-                .id(currentExerciseIndex)
-                .transition(.opacity)
-                .animation(.easeOut(duration: 0.18), value: currentExerciseIndex)
+            // Nav row already shown above
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -186,10 +186,17 @@ extension InWorkoutView {
             HStack {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 32, height: 32)
-                        .background(Circle().fill(Color(UIColor.secondarySystemBackground)))
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .frame(width: 48, height: 48)
+                        .background(Circle().fill(Color.black.opacity(0.02)))
+                }
+                Button(action: {}) {
+                    Image(systemName: "list.bullet")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .frame(width: 48, height: 48)
+                        .background(Circle().fill(Color.black.opacity(0.02)))
                 }
                 Spacer()
             }
@@ -200,11 +207,16 @@ extension InWorkoutView {
                 Spacer()
                 Button(action: finishWorkout) {
                     Text("Finish")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(isAllSetsCompleted ? .black : .black)
+                        .padding(.horizontal, 14)
+                        .frame(height: 48)
+                        .background(
+                            isAllSetsCompleted ? AnyView(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.brandYellowPrimary)) : AnyView(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.black.opacity(0.02)))
+                        )
                 }
-                .buttonStyle(PrimaryButtonStyle())
             }
-            .padding(.trailing, 24)
-            .padding(.top, 6)
+            .padding(.horizontal, 12)
         }
     }
 }
@@ -244,13 +256,10 @@ extension InWorkoutView {
                         .foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(exerciseName(at: currentExerciseIndex - 1))
-                            .font(.system(size: 16))
+                            .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                        Text(exerciseSetsLabel(at: currentExerciseIndex - 1))
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
                     }
                 }
                 .padding(.horizontal, 8)
@@ -263,17 +272,17 @@ extension InWorkoutView {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             // Middle list icon (inert)
-            Button(action: {}) {
-                Image(systemName: "list.bullet")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(8)
-            }
-            .disabled(true)
-            .opacity(0.8)
-            .buttonStyle(.plain)
-            .tint(Color.secondary)
-            .frame(width: 44)
+            // Button(action: {}) {
+            //     Image(systemName: "list.bullet")
+            //         .font(.system(size: 18, weight: .medium))
+            //         .foregroundStyle(.secondary)
+            //         .padding(8)
+            // }
+            // .disabled(true)
+            // .opacity(0.8)
+            // .buttonStyle(.plain)
+            // .tint(Color.secondary)
+            // .frame(width: 44)
 
             // Right target (next exercise)
             let hasNext = currentExerciseIndex + 1 < sortedExercises.count
@@ -281,13 +290,10 @@ extension InWorkoutView {
                 HStack(spacing: 6) {
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(exerciseName(at: currentExerciseIndex + 1))
-                            .font(.system(size: 16))
+                            .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                        Text(exerciseSetsLabel(at: currentExerciseIndex + 1))
-                            .font(.system(size: 14))
-                            .foregroundStyle(.secondary)
                     }
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14, weight: .semibold))
@@ -806,6 +812,11 @@ extension InWorkoutView {
         guard ex.sets.isEmpty == false else { return false }
         for s in ex.sets { if s.isLogged == false { return false } }
         return true
+    }
+
+    private var isAllSetsCompleted: Bool {
+        for ex in sortedExercises { if isExerciseComplete(ex) == false { return false } }
+        return !sortedExercises.isEmpty
     }
 
     private func firstActiveExerciseIndex() -> Int {
